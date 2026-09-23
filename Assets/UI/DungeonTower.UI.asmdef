@@ -1,0 +1,22 @@
+{
+    "name": "DungeonTower.UI",
+    "rootNamespace": "DungeonTower.UI",
+    "references": [
+        "DungeonTower.Core",
+        "DungeonTower.Combat",
+        "DungeonTower.Generation",
+        "Unity.TextMeshPro",
+        "Unity.InputSystem",
+        "UnityEngine.UI",
+        "DungeonTower.Items"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

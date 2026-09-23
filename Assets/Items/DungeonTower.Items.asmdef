@@ -1,0 +1,16 @@
+{
+    "name": "DungeonTower.Items",
+    "rootNamespace": "DungeonTower.Items",
+    "references": [
+        "DungeonTower.Core"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

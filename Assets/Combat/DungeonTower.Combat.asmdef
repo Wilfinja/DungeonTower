@@ -1,0 +1,16 @@
+{
+    "name": "DungeonTower.Combat",
+    "rootNamespace": "DungeonTower.Combat",
+    "references": [
+        "DungeonTower.Core"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
