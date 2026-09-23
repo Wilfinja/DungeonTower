@@ -21,9 +21,14 @@ namespace DungeonTower.UI
     /// cancels Ability/Scroll mode back to Move. While aiming an area
     /// ability (Blast/Line/Cone), hovering the grid live-previews the
     /// footprint; a click on a valid tile resolves the attack (single
-    /// target or AoE) and ends the turn. A minimal "move toward nearest
-    /// enemy, attack if in range" rule controls enemy turns until real AI
-    /// gets built as its own piece.
+    /// target or AoE) and ends the turn. Attacks (player or enemy) also
+    /// require line of sight, not just range. A "find a firing position
+    /// with range + LOS, else close the real-path distance" rule controls
+    /// enemy movement until real AI gets built as its own piece. Dead
+    /// units drop their gear as loot, picked up automatically by walking
+    /// onto the tile; a tinted overlay shows every un-alerted enemy's
+    /// detection radius (LOS-clipped) so the player can see where it's
+    /// safe to approach.
     /// </summary>
     public sealed class BattleController : MonoBehaviour
     {
@@ -33,8 +38,22 @@ namespace DungeonTower.UI
         [SerializeField] private InventoryPanelView _inventoryPanel;
         [SerializeField] private GameObject _inventoryToggleButton;
         [SerializeField] private ItemRegistry _itemRegistry;
+        [SerializeField] private ThemeRegistry _themeRegistry;
+        [SerializeField] private GameObject _lootMarkerPrefab;
+        [SerializeField] private GameObject _dangerZoneMarkerPrefab;
+        [SerializeField] private LootWindowView _lootWindow;
+        [SerializeField] private GameObject _lootToggleButton;
+        [SerializeField] private List<Chest> _chests = new List<Chest>();
         [SerializeField] private int _mapWidth = 24;
         [SerializeField] private int _mapHeight = 16;
+
+        // Hook for future floor progression — always 1 until a
+        // "descend to the next floor" flow exists to increment it.
+        // Both the theme lookup and the room/corridor size formula
+        // already key off this, so wiring that flow in later is just a
+        // matter of setting this field and rebuilding the roster.
+        [SerializeField] private int _currentFloor = 1;
+        private int _bossesSpawnedThisFloor;
 
         private enum ActionMode { Move, Ability, Scroll }
 
@@ -47,6 +66,9 @@ namespace DungeonTower.UI
         private int _selectedAbilityIndex;
         private IScroll _pendingScroll;
         private readonly PartyInventory _inventory = new PartyInventory();
+        private readonly List<LootDrop> _lootOnGround = new List<LootDrop>();
+        private readonly Dictionary<GridPosition, GameObject> _lootMarkers = new Dictionary<GridPosition, GameObject>();
+        private readonly Dictionary<GridPosition, GameObject> _dangerZoneMarkers = new Dictionary<GridPosition, GameObject>();
         private List<CombatUnit> _partyMembers;
         public IReadOnlyList<CombatUnit> PartyMembers => _partyMembers;
 
@@ -58,6 +80,12 @@ namespace DungeonTower.UI
             _inventoryPanel.ArmorEquipRequested += OnArmorEquipRequested;
             _inventoryPanel.PotionUseRequested += OnPotionUseRequested;
             _inventoryPanel.ScrollUseRequested += OnScrollUseRequested;
+            _lootWindow.WeaponTakeRequested += OnLootWeaponTakeRequested;
+            _lootWindow.ArmorTakeRequested += OnLootArmorTakeRequested;
+            _lootWindow.PotionTakeRequested += OnLootPotionTakeRequested;
+            _lootWindow.ScrollTakeRequested += OnLootScrollTakeRequested;
+            _lootWindow.TakeAllRequested += OnTakeAllLootRequested;
+            _lootWindow.CloseRequested += OnLootWindowCloseRequested;
         }
 
         private void OnDestroy()
@@ -74,6 +102,15 @@ namespace DungeonTower.UI
                 _inventoryPanel.PotionUseRequested -= OnPotionUseRequested;
                 _inventoryPanel.ScrollUseRequested -= OnScrollUseRequested;
             }
+            if (_lootWindow != null)
+            {
+                _lootWindow.WeaponTakeRequested -= OnLootWeaponTakeRequested;
+                _lootWindow.ArmorTakeRequested -= OnLootArmorTakeRequested;
+                _lootWindow.PotionTakeRequested -= OnLootPotionTakeRequested;
+                _lootWindow.ScrollTakeRequested -= OnLootScrollTakeRequested;
+                _lootWindow.TakeAllRequested -= OnTakeAllLootRequested;
+                _lootWindow.CloseRequested -= OnLootWindowCloseRequested;
+            }
         }
 
         // Forwards to the panel's own Toggle() — lets the Inventory
@@ -83,9 +120,32 @@ namespace DungeonTower.UI
         public void ToggleInventoryPanel()
         {
             if (_inventoryPanel == null) return;
-            if (!_inventoryPanel.gameObject.activeSelf && _mode != ActionMode.Move)
-                SetMode(ActionMode.Move);
+            if (!_inventoryPanel.gameObject.activeSelf)
+            {
+                if (_mode != ActionMode.Move) SetMode(ActionMode.Move);
+                if (_lootWindow != null) _lootWindow.Hide();
+            }
             _inventoryPanel.Toggle();
+        }
+
+        // Same shape as ToggleInventoryPanel — lets a Loot button appear
+        // whenever the current unit is standing on/adjacent to something
+        // lootable (see RefreshLootAvailability) and open a window
+        // listing every in-range container's contents as click-to-take
+        // rows.
+        public void ToggleLootWindow()
+        {
+            if (_lootWindow == null || _battle == null) return;
+
+            if (_lootWindow.gameObject.activeSelf)
+            {
+                _lootWindow.Hide();
+                return;
+            }
+
+            if (_mode != ActionMode.Move) SetMode(ActionMode.Move);
+            _inventoryPanel.Hide();
+            _lootWindow.Show(GetLootableContainersInRange(_battle.CurrentUnit));
         }
 
         private void Start()
@@ -102,6 +162,7 @@ namespace DungeonTower.UI
             var units = BuildStartingRoster(dungeon);
             _partyMembers = units.Where(u => u.Faction == Faction.Player).ToList();
             _inventoryPanel.ConfigurePartyNames(_partyMembers[0].DisplayName, _partyMembers[1].DisplayName);
+            _inventoryPanel.SetPartyMembers(_partyMembers);
 
             foreach (var unit in units)
                 SpawnUnitView(unit);
@@ -126,6 +187,19 @@ namespace DungeonTower.UI
 
         private const int CorridorRoamRadius = 6;
 
+        // Slot-count tuning: how many tiles of room/corridor area "buy"
+        // one enemy slot, clamped to a sane range, plus a small bump per
+        // few floors. All placeholders, same as everything else that's
+        // still in first-pass tuning.
+        private const int TilesPerEnemyRoom = 6;
+        private const int MinPerRoom = 1;
+        private const int MaxPerRoom = 5;
+        private const int TilesPerEnemyCorridor = 8;
+        private const int MinPerCorridor = 0;
+        private const int MaxPerCorridor = 4;
+        private const int FloorsPerSizeBonus = 3;
+        private const int MaxRolePickAttempts = 5;
+
         private List<CombatUnit> BuildStartingRoster(GeneratedDungeon dungeon)
         {
             var playerSpawns = SpawnZones.PlayerSpawns(dungeon, 2);
@@ -141,57 +215,151 @@ namespace DungeonTower.UI
             adept.Stats.TryEquipArmor(_itemRegistry.GetArmor(ArmorId.Robe));
 
             var units = new List<CombatUnit> { warrior, adept };
-            units.AddRange(BuildRoomGuardGroup(dungeon, playerSpawns));
-            units.AddRange(BuildCorridorScoutGroup(dungeon, playerSpawns, units));
+            units.AddRange(BuildEnemyRoster(dungeon, playerSpawns));
 
             return units;
         }
 
-        // Melee "guards" confined to the last room placed while idle —
-        // reuses the existing Warrior/Sword/Plate combo.
-        private List<CombatUnit> BuildRoomGuardGroup(GeneratedDungeon dungeon, List<GridPosition> exclude)
+        // Every room except the player's starting room (dungeon.Rooms
+        // First()) gets its own encounter, sized by that room's area
+        // (plus a small floor bonus) and filled slot-by-slot via
+        // weighted role, then weighted-enemy, picks from the floor's
+        // active theme. One corridor-patrol group follows the same
+        // mechanism at a central anchor point, sized by its roam
+        // patch's tile count instead of a room's area. The boss cap is
+        // enforced across this whole call, not per room/corridor.
+        private List<CombatUnit> BuildEnemyRoster(GeneratedDungeon dungeon, List<GridPosition> playerSpawns)
         {
-            var spawns = SpawnZones.EnemySpawns(dungeon, 2, exclude);
-            var room = dungeon.Rooms.Last();
-            var roamZone = room.Tiles().ToList();
+            var units = new List<CombatUnit>();
 
-            var group = new List<CombatUnit>();
-            for (int i = 0; i < spawns.Count; i++)
+            var theme = _themeRegistry != null ? _themeRegistry.GetThemeForFloor(_currentFloor) : null;
+            if (theme == null || theme.Enemies.Count == 0)
             {
-                var grunt = new CombatUnit("Grunt", Faction.Enemy,
-                    new UnitStats(ClassLibrary.Get(ClassId.Warrior)), spawns[i]);
-                grunt.TryEquip(_itemRegistry.GetWeapon(WeaponId.Sword));
-                grunt.Stats.TryEquipArmor(_itemRegistry.GetArmor(ArmorId.Plate));
-                grunt.SetRoamZone(roamZone);
-                group.Add(grunt);
+                Debug.LogError($"BattleController: no usable DungeonThemeSO for floor {_currentFloor} — no enemies will spawn.");
+                return units;
+            }
+
+            _bossesSpawnedThisFloor = 0;
+            var exclude = new List<GridPosition>(playerSpawns);
+
+            foreach (var room in dungeon.Rooms.Skip(1))
+            {
+                var group = BuildRoomEncounter(dungeon, theme, room, exclude);
+                units.AddRange(group);
+                exclude.AddRange(group.Select(u => u.Position));
+            }
+
+            var anchor = SpawnZones.PickCorridorAnchor(dungeon);
+            if (anchor != null)
+                units.AddRange(BuildCorridorEncounter(dungeon, theme, anchor.Value, exclude));
+
+            return units;
+        }
+
+        private List<CombatUnit> BuildRoomEncounter(
+            GeneratedDungeon dungeon, DungeonThemeSO theme, Room room, List<GridPosition> exclude)
+        {
+            int slotCount = ComputeSlotCount(room.Width * room.Height, TilesPerEnemyRoom, MinPerRoom, MaxPerRoom);
+            var spawns = SpawnZones.SpawnsNearPosition(dungeon, room.Center, slotCount, exclude);
+            var roamZone = room.Tiles().ToList();
+            return SpawnGroup(theme, spawns, roamZone);
+        }
+
+        private List<CombatUnit> BuildCorridorEncounter(
+            GeneratedDungeon dungeon, DungeonThemeSO theme, GridPosition anchor, List<GridPosition> exclude)
+        {
+            var roamZone = dungeon.CorridorTilesNear(anchor, CorridorRoamRadius);
+            int slotCount = ComputeSlotCount(roamZone.Count, TilesPerEnemyCorridor, MinPerCorridor, MaxPerCorridor);
+            if (slotCount <= 0) return new List<CombatUnit>();
+
+            var spawns = SpawnZones.SpawnsNearPosition(dungeon, anchor, slotCount, exclude);
+            return SpawnGroup(theme, spawns, roamZone);
+        }
+
+        private List<CombatUnit> SpawnGroup(
+            DungeonThemeSO theme, List<GridPosition> spawns, IEnumerable<GridPosition> roamZone)
+        {
+            var group = new List<CombatUnit>();
+            foreach (var position in spawns)
+            {
+                var unit = SpawnEnemyFromTheme(theme, position);
+                if (unit == null) continue;
+                unit.SetRoamZone(roamZone);
+                group.Add(unit);
             }
             return group;
         }
 
-        // Ranged "scouts" confined to a local patch of corridor tiles
-        // around a central anchor point while idle — a Scout/Bow/Cloak
-        // combo, distinct from the room guards on purpose.
-        private List<CombatUnit> BuildCorridorScoutGroup(
-            GeneratedDungeon dungeon, List<GridPosition> playerSpawns, List<CombatUnit> alreadyPlaced)
+        private int ComputeSlotCount(int areaTiles, int tilesPerEnemy, int min, int max)
         {
-            var anchor = SpawnZones.PickCorridorAnchor(dungeon);
-            if (anchor == null) return new List<CombatUnit>(); // no corridors (e.g. single-room fallback)
+            int baseCount = Mathf.Max(1, areaTiles / tilesPerEnemy);
+            int floorBonus = (_currentFloor - 1) / FloorsPerSizeBonus;
+            return Mathf.Clamp(baseCount + floorBonus, min, max);
+        }
 
-            var exclude = playerSpawns.Concat(alreadyPlaced.Select(u => u.Position)).ToList();
-            var spawns = SpawnZones.SpawnsNearPosition(dungeon, anchor.Value, 2, exclude);
-            var roamZone = dungeon.CorridorTilesNear(anchor.Value, CorridorRoamRadius);
+        private CombatUnit SpawnEnemyFromTheme(DungeonThemeSO theme, GridPosition position)
+        {
+            var enemySO = PickEnemy(theme);
+            if (enemySO == null) return null;
 
-            var group = new List<CombatUnit>();
-            for (int i = 0; i < spawns.Count; i++)
+            if (enemySO.Role == EnemyRole.Boss) _bossesSpawnedThisFloor++;
+
+            var unit = new CombatUnit(enemySO.DisplayName, Faction.Enemy,
+                new UnitStats(ClassLibrary.Get(enemySO.ClassId)), position,
+                enemySO.DetectionRadius, enemySO.AlertRadius);
+            unit.TryEquip(_itemRegistry.GetWeapon(enemySO.WeaponId));
+            unit.Stats.TryEquipArmor(_itemRegistry.GetArmor(enemySO.ArmorId));
+            return unit;
+        }
+
+        // Two-layer weighted pick: first which ROLE fills this slot
+        // (theme.RoleWeights — the "minion way more likely than boss"
+        // table), then which specific EnemySO within that role
+        // (each entry's own Weight). Rerolls the role if it picks Boss
+        // past the theme's cap, or if the theme has no enemy of that
+        // role at all. Falls back to any non-Boss enemy if every
+        // reroll comes up empty, so a slot never just goes unfilled.
+        private EnemySO PickEnemy(DungeonThemeSO theme)
+        {
+            for (int attempt = 0; attempt < MaxRolePickAttempts; attempt++)
             {
-                var scout = new CombatUnit("Scout", Faction.Enemy,
-                    new UnitStats(ClassLibrary.Get(ClassId.Scout)), spawns[i]);
-                scout.TryEquip(_itemRegistry.GetWeapon(WeaponId.Bow));
-                scout.Stats.TryEquipArmor(_itemRegistry.GetArmor(ArmorId.Cloak));
-                scout.SetRoamZone(roamZone);
-                group.Add(scout);
+                var role = PickRole(theme);
+                if (role == EnemyRole.Boss && _bossesSpawnedThisFloor >= theme.MaxBossesPerFloor)
+                    continue;
+
+                var candidates = theme.Enemies
+                    .Where(e => e.Enemy != null && e.Enemy.Role == role)
+                    .Select(e => (e.Enemy, e.Weight))
+                    .ToList();
+                if (candidates.Count == 0) continue;
+
+                return WeightedRandom.Pick(candidates, _rng);
             }
-            return group;
+
+            var fallback = theme.Enemies
+                .Where(e => e.Enemy != null && e.Enemy.Role != EnemyRole.Boss)
+                .Select(e => (e.Enemy, e.Weight))
+                .ToList();
+            if (fallback.Count > 0) return WeightedRandom.Pick(fallback, _rng);
+
+            return theme.Enemies.Count > 0 ? theme.Enemies[0].Enemy : null; // truly nothing else to offer
+        }
+
+        private EnemyRole PickRole(DungeonThemeSO theme)
+        {
+            if (theme.RoleWeights.Count > 0)
+                return WeightedRandom.Pick(
+                    theme.RoleWeights.Select(r => (r.Role, r.Weight)).ToList(), _rng);
+
+            // No role weights authored on this theme — fall back to a
+            // uniform pick across whichever roles its enemy pool
+            // actually has, rather than defaulting to one fixed role.
+            var rolesPresent = theme.Enemies
+                .Where(e => e.Enemy != null)
+                .Select(e => e.Enemy.Role)
+                .Distinct()
+                .ToList();
+            return rolesPresent.Count > 0 ? rolesPresent[_rng.Next(rolesPresent.Count)] : EnemyRole.Minion;
         }
 
         private void SpawnUnitView(CombatUnit unit)
@@ -210,20 +378,25 @@ namespace DungeonTower.UI
                 _abilityBar.Hide();
                 _inventoryPanel.Hide();
                 _inventoryToggleButton.SetActive(false);
+                if (_lootWindow != null) _lootWindow.Hide();
+                if (_lootToggleButton != null) _lootToggleButton.SetActive(false);
                 return;
             }
 
             var unit = _battle.CurrentUnit;
             Debug.Log($"Round {_battle.RoundNumber} — {unit.DisplayName}'s turn ({unit.Faction})");
             RefreshTurnHighlight();
+            RefreshDangerZoneMarkers();
             _gridView.ClearHighlights();
             _pendingScroll = null;
             _inventoryPanel.Hide();
+            if (_lootWindow != null) _lootWindow.Hide();
 
             if (unit.Faction == Faction.Player)
             {
                 _inventoryToggleButton.SetActive(true);
                 _inventoryPanel.SetTargetMode(IsInCombat(), _partyMembers.IndexOf(unit));
+                RefreshLootAvailability(unit);
 
                 if (unit.EquippedWeapon != null) _abilityBar.Show(unit.EquippedWeapon);
                 else _abilityBar.ShowMoveOnly();
@@ -233,6 +406,7 @@ namespace DungeonTower.UI
             else
             {
                 _inventoryToggleButton.SetActive(false);
+                if (_lootToggleButton != null) _lootToggleButton.SetActive(false);
                 _abilityBar.Hide();
                 RunEnemyTurn(unit);
             }
@@ -384,13 +558,15 @@ namespace DungeonTower.UI
         }
 
         // The switcher only ever offers an index within the party list,
-        // and locks to the current unit's index once in combat — so this
-        // should never actually return null in practice, but a mis-wired
-        // scene (e.g. wrong party size) fails safe instead of throwing.
+        // and locks to the current unit's index once in combat — so a
+        // mis-wired scene (e.g. wrong party size) fails safe instead of
+        // throwing. Also refuses a fallen member — nothing should be
+        // equippable/usable on (or by) someone who's already dead.
         private CombatUnit ResolveEquipTarget(int partyIndex)
         {
             if (_partyMembers == null || partyIndex < 0 || partyIndex >= _partyMembers.Count) return null;
-            return _partyMembers[partyIndex];
+            var unit = _partyMembers[partyIndex];
+            return unit.IsAlive ? unit : null;
         }
 
         // Out of combat, equipping/using is free — the panel stays open
@@ -413,10 +589,12 @@ namespace DungeonTower.UI
         private bool IsInCombat() => _unitViews.Keys.Any(u => u.Faction == Faction.Enemy && u.IsAlerted);
 
         // Valid target tiles for the given ability: a single-target
-        // ability can only be clicked on a living enemy within Range; an
-        // AoE ability (Blast/Line/Cone) can be aimed at ANY in-bounds
-        // tile within Range, occupied or not, since the impact point —
-        // not an occupant — is what matters.
+        // ability can only be clicked on a living, LINE-OF-SIGHT-visible
+        // enemy within Range; an AoE ability (Blast/Line/Cone) can be
+        // aimed at ANY in-bounds tile within Range, occupied or not,
+        // since the impact point — not an occupant — is what matters.
+        // (AoE targeting doesn't LOS-gate the impact tile itself yet —
+        // worth revisiting if you want walls to block area spells too.)
         private List<GridPosition> GetValidAbilityTargetTiles(CombatUnit unit, IAbility ability)
         {
             if (ability == null) return new List<GridPosition>();
@@ -433,7 +611,8 @@ namespace DungeonTower.UI
         {
             return _unitViews.Keys
                 .Where(u => u.IsAlive && u.Faction != unit.Faction
-                    && u.Position.ManhattanDistance(unit.Position) <= ability.Range)
+                    && u.Position.ManhattanDistance(unit.Position) <= ability.Range
+                    && LineOfSight.HasClearPath(unit.Position, u.Position, _map))
                 .Select(u => u.Position)
                 .ToList();
         }
@@ -580,7 +759,7 @@ namespace DungeonTower.UI
 
             if (!enemy.IsAlerted)
             {
-                if (enemy.CanSense(target.Position))
+                if (enemy.CanSense(target.Position, _map))
                 {
                     AlertUnit(enemy);
                     Debug.Log($"{enemy.DisplayName} spots {target.DisplayName}!");
@@ -601,7 +780,8 @@ namespace DungeonTower.UI
             var ability = GetEnemyActiveAbility(enemy);
             int range = ability?.Range ?? 1;
 
-            if (enemy.Position.ManhattanDistance(target.Position) <= range)
+            if (enemy.Position.ManhattanDistance(target.Position) <= range
+                && LineOfSight.HasClearPath(enemy.Position, target.Position, _map))
             {
                 if (ability != null) ExecuteAbilityAt(enemy, ability, target.Position);
                 EndTurn();
@@ -612,13 +792,47 @@ namespace DungeonTower.UI
                 enemy.Position, enemy.Stats.MoveRange, _map, OccupiedTilesExcluding(enemy));
             if (reachable.Count > 0)
             {
-                var step = reachable.OrderBy(pos => pos.ManhattanDistance(target.Position)).First();
-                enemy.Position = step;
-                _unitViews[enemy].Refresh();
+                var step = ChooseEnemyStep(enemy, target, range, reachable);
+                if (step.HasValue)
+                {
+                    enemy.Position = step.Value;
+                    _unitViews[enemy].Refresh();
+                }
             }
 
             EndTurn();
         }
+
+        // Prefers a reachable tile that already has range AND line of
+        // sight to the target — "find a firing position" — breaking ties
+        // by real path distance. Falls back to the reachable tile with
+        // the smallest real path distance if no such tile exists this
+        // turn. Either way, "real path distance" (via PathDistanceField)
+        // is what actually fixes walking into dead-end corners — a
+        // straight-line-close tile behind a wall now correctly ranks
+        // farther than one along an actual route around it.
+        private GridPosition? ChooseEnemyStep(
+            CombatUnit enemy, CombatUnit target, int range, HashSet<GridPosition> reachable)
+        {
+            var distanceField = PathDistanceField.BuildFrom(target.Position, _map);
+
+            var firingPosition = reachable
+                .Where(pos => pos.ManhattanDistance(target.Position) <= range
+                    && LineOfSight.HasClearPath(pos, target.Position, _map))
+                .OrderBy(pos => PathDistanceOrMax(distanceField, pos))
+                .Select(pos => (GridPosition?)pos)
+                .FirstOrDefault();
+
+            if (firingPosition != null) return firingPosition;
+
+            return reachable
+                .OrderBy(pos => PathDistanceOrMax(distanceField, pos))
+                .Select(pos => (GridPosition?)pos)
+                .FirstOrDefault();
+        }
+
+        private static int PathDistanceOrMax(Dictionary<GridPosition, int> field, GridPosition pos)
+            => field.TryGetValue(pos, out var distance) ? distance : int.MaxValue;
 
         private CombatUnit FindNearestPlayer(CombatUnit from)
         {
@@ -636,7 +850,8 @@ namespace DungeonTower.UI
         // Dispatches to single-target or AoE resolution depending on the
         // ability's shape — the one place both HandleAbilityClick and
         // RunEnemyTurn go through, so an enemy wielding an AoE weapon
-        // "just works" the same way a player's does.
+        // "just works" the same way a player's does. Each kill (single
+        // or AoE) drops loot via HandleDeath.
         private void ExecuteAbilityAt(CombatUnit attacker, IAbility ability, GridPosition impactTile)
         {
             if (ability.AreaShape == AttackShape.Single)
@@ -650,20 +865,249 @@ namespace DungeonTower.UI
             var hits = AttackResolver.ResolveAoE(attacker, ability, impactTile, _unitViews.Keys, _rng);
             foreach (var (target, result) in hits)
             {
+                bool wasAlive = target.IsAlive;
                 target.ApplyDamage(result.Damage);
                 AlertUnit(target);
                 _unitViews[target].Refresh();
                 Debug.Log($"{attacker.DisplayName} uses {ability.Name} on {target.DisplayName} for {result.Damage} {ability.Kind}{(result.IsCrit ? " (CRIT)" : "")} (AoE)");
+
+                if (wasAlive && !target.IsAlive)
+                    HandleDeath(target);
             }
         }
 
         private void ResolveAttack(CombatUnit attacker, CombatUnit defender, IAbility ability)
         {
             var result = AttackResolver.Resolve(attacker, defender, ability, _rng);
+            bool wasAlive = defender.IsAlive;
             defender.ApplyDamage(result.Damage);
             AlertUnit(defender);
             _unitViews[defender].Refresh();
             Debug.Log($"{attacker.DisplayName} uses {ability.Name} on {defender.DisplayName} for {result.Damage} {ability.Kind}{(result.IsCrit ? " (CRIT)" : "")}");
+
+            if (wasAlive && !defender.IsAlive)
+                HandleDeath(defender);
+        }
+
+        // No revive exists — a dead unit is gone for the rest of the run.
+        // Whatever it had equipped drops onto its tile as loot, for either
+        // side to reclaim.
+        private void HandleDeath(CombatUnit unit)
+        {
+            Debug.Log($"{unit.DisplayName} has fallen.");
+
+            if (unit.EquippedWeapon != null || unit.Stats.EquippedArmor != null)
+            {
+                _lootOnGround.Add(new LootDrop(unit.Position, unit.EquippedWeapon, unit.Stats.EquippedArmor));
+                SpawnLootMarker(unit.Position);
+            }
+        }
+
+        // Every living, un-alerted enemy's detection radius, shown as a
+        // tinted overlay — a separate object per tile, not a change to
+        // TileView's own color, so it visually blends with whatever
+        // move/attack highlight is already on that tile rather than
+        // fighting it for the same slot. Matches CanSense exactly,
+        // line-of-sight included — a tile behind a wall won't show as
+        // dangerous even if it's within raw radius, since it genuinely
+        // isn't anymore. Only shows on walkable tiles, since those are
+        // the only ones a player could ever actually stand on.
+        private void RefreshDangerZoneMarkers()
+        {
+            var dangerTiles = new HashSet<GridPosition>();
+            foreach (var enemy in _unitViews.Keys)
+            {
+                if (enemy.Faction != Faction.Enemy || !enemy.IsAlive || enemy.IsAlerted) continue;
+                foreach (var tile in TilesWithinRadius(enemy.Position, enemy.DetectionRadius))
+                    if (_map.IsWalkable(tile) && LineOfSight.HasClearPath(enemy.Position, tile, _map))
+                        dangerTiles.Add(tile);
+            }
+
+            var stale = _dangerZoneMarkers.Keys.Where(pos => !dangerTiles.Contains(pos)).ToList();
+            foreach (var pos in stale)
+            {
+                Destroy(_dangerZoneMarkers[pos]);
+                _dangerZoneMarkers.Remove(pos);
+            }
+
+            if (_dangerZoneMarkerPrefab == null) return;
+            foreach (var pos in dangerTiles)
+            {
+                if (_dangerZoneMarkers.ContainsKey(pos)) continue;
+                var marker = Instantiate(_dangerZoneMarkerPrefab, transform);
+                marker.transform.position = GridToWorld.ToWorldPosition(pos);
+                _dangerZoneMarkers[pos] = marker;
+            }
+        }
+
+        private static IEnumerable<GridPosition> TilesWithinRadius(GridPosition center, int radius)
+        {
+            for (int dx = -radius; dx <= radius; dx++)
+                for (int dy = -radius; dy <= radius; dy++)
+                    if (System.Math.Abs(dx) + System.Math.Abs(dy) <= radius)
+                        yield return new GridPosition(center.X + dx, center.Y + dy);
+        }
+
+        private void SpawnLootMarker(GridPosition position)
+        {
+            if (_lootMarkerPrefab == null) return;
+            var marker = Instantiate(_lootMarkerPrefab, transform);
+            marker.transform.position = GridToWorld.ToWorldPosition(position);
+            _lootMarkers[position] = marker;
+        }
+
+        private void RemoveLootMarker(GridPosition position)
+        {
+            if (_lootMarkers.TryGetValue(position, out var marker))
+            {
+                Destroy(marker);
+                _lootMarkers.Remove(position);
+            }
+        }
+
+        // Every corpse pile and chest the current unit is close enough
+        // to loot right now, filtered to ones that actually still have
+        // something in them. A pile needs the unit standing exactly on
+        // it (InteractionRadius 0); a chest can be looted from an
+        // adjacent tile too (InteractionRadius 1).
+        private List<ILootContainer> GetLootableContainersInRange(CombatUnit unit)
+        {
+            var result = new List<ILootContainer>();
+
+            foreach (var drop in _lootOnGround)
+                if (!drop.IsEmpty && unit.Position.ManhattanDistance(drop.Position) <= drop.InteractionRadius)
+                    result.Add(drop);
+
+            foreach (var chest in _chests)
+                if (chest != null && !chest.IsEmpty
+                    && unit.Position.ManhattanDistance(chest.Position) <= chest.InteractionRadius)
+                    result.Add(chest);
+
+            return result;
+        }
+
+        // Shows/hides the Loot button for whoever's turn it currently
+        // is — called once at the start of a player's turn. Doesn't need
+        // rechecking mid-turn: moving ends the turn immediately (one
+        // action per turn), so the next chance to loot is always at the
+        // start of a turn, after BeginTurn has already run this.
+        private void RefreshLootAvailability(CombatUnit unit)
+        {
+            if (_lootToggleButton != null)
+                _lootToggleButton.SetActive(GetLootableContainersInRange(unit).Count > 0);
+        }
+
+        private void OnLootWeaponTakeRequested(ILootContainer container, IWeapon weapon)
+        {
+            container.TakeWeapon(weapon);
+            _inventory.AddWeapon(weapon);
+            Debug.Log($"Looted {weapon.Name}.");
+            CleanUpIfEmpty(container);
+            ResolveLootCost();
+        }
+
+        private void OnLootArmorTakeRequested(ILootContainer container, IArmor armor)
+        {
+            container.TakeArmor(armor);
+            _inventory.AddArmor(armor);
+            Debug.Log($"Looted {armor.Name}.");
+            CleanUpIfEmpty(container);
+            ResolveLootCost();
+        }
+
+        private void OnLootPotionTakeRequested(ILootContainer container, IPotion potion)
+        {
+            container.TakePotion(potion);
+            _inventory.AddPotion(potion);
+            Debug.Log($"Looted {potion.Name}.");
+            CleanUpIfEmpty(container);
+            ResolveLootCost();
+        }
+
+        private void OnLootScrollTakeRequested(ILootContainer container, IScroll scroll)
+        {
+            container.TakeScroll(scroll);
+            _inventory.AddScroll(scroll);
+            Debug.Log($"Looted {scroll.Name}.");
+            CleanUpIfEmpty(container);
+            ResolveLootCost();
+        }
+
+        // Grabs everything from every in-range container in one go.
+        // Snapshots each collection with ToList() first since taking
+        // mutates the very list/dictionary being iterated.
+        private void OnTakeAllLootRequested()
+        {
+            foreach (var container in GetLootableContainersInRange(_battle.CurrentUnit))
+            {
+                foreach (var weapon in container.Weapons.ToList())
+                {
+                    container.TakeWeapon(weapon);
+                    _inventory.AddWeapon(weapon);
+                }
+                foreach (var armor in container.Armors.ToList())
+                {
+                    container.TakeArmor(armor);
+                    _inventory.AddArmor(armor);
+                }
+                foreach (var pair in container.Potions.ToList())
+                    for (int i = 0; i < pair.Value; i++)
+                    {
+                        container.TakePotion(pair.Key);
+                        _inventory.AddPotion(pair.Key);
+                    }
+                foreach (var pair in container.Scrolls.ToList())
+                    for (int i = 0; i < pair.Value; i++)
+                    {
+                        container.TakeScroll(pair.Key);
+                        _inventory.AddScroll(pair.Key);
+                    }
+                CleanUpIfEmpty(container);
+            }
+
+            Debug.Log("Looted everything in range.");
+            ResolveLootCost();
+        }
+
+        private void OnLootWindowCloseRequested()
+        {
+            if (_lootWindow != null) _lootWindow.Hide();
+        }
+
+        // An emptied corpse pile disappears from the ground entirely
+        // (and its marker with it) — an emptied chest just stays put
+        // with nothing left to offer, since it's a piece of the scene,
+        // not something that was ever going to be removed.
+        private void CleanUpIfEmpty(ILootContainer container)
+        {
+            if (!container.IsEmpty) return;
+            if (container is LootDrop drop)
+            {
+                _lootOnGround.Remove(drop);
+                RemoveLootMarker(drop.Position);
+            }
+        }
+
+        // Matches equip/potion/scroll precedent exactly: free to loot
+        // out of combat, but once any enemy is alerted, taking something
+        // (including via Take All) costs the current unit's turn like
+        // any other action, and the window closes. That means each
+        // individual take can end the turn mid-combat, same as equip
+        // today — if you'd rather the whole visit be one action (grab
+        // several things, pay once on close), this is the spot to change.
+        private void ResolveLootCost()
+        {
+            if (IsInCombat())
+            {
+                if (_lootWindow != null) _lootWindow.Hide();
+                EndTurn();
+            }
+            else
+            {
+                var unit = _battle.CurrentUnit;
+                RefreshLootAvailability(unit);
+                if (_lootWindow != null) _lootWindow.Refresh(GetLootableContainersInRange(unit));
+            }
         }
 
         // Single entry point for alerting a unit — marks it alerted, then

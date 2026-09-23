@@ -10,7 +10,12 @@ namespace DungeonTower.Core
     public enum WeaponId
     {
         Sword,
+        Mace,
+        SwordandShield,
+        AxeandShield,
         Staff,
+        Spear,
+        WarAxe,
         Bow
     }
 }

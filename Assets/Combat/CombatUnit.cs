@@ -54,7 +54,8 @@ namespace DungeonTower.Combat
             CurrentMp = stats.MaxMp;
         }
 
-        public bool CanSense(GridPosition position) => Position.ManhattanDistance(position) <= DetectionRadius;
+        public bool CanSense(GridPosition position, IWalkableMap map)
+            => Position.ManhattanDistance(position) <= DetectionRadius && LineOfSight.HasClearPath(Position, position, map);
 
         public void Alert() => IsAlerted = true;
 

@@ -274,10 +274,11 @@ MonoBehaviour:
   _abilityBar: {fileID: 1102231066}
   _inventoryPanel: {fileID: 1627022422}
   _inventoryToggleButton: {fileID: 610176510}
+  _itemRegistry: {fileID: 1029898240}
+  _lootMarkerPrefab: {fileID: 3862874424933649878, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
+  _dangerZoneMarkerPrefab: {fileID: 2805856615649842020, guid: 724ce9a3f02c3b54a98e65ff4cfe52bf, type: 3}
   _mapWidth: 40
   _mapHeight: 18
-  _lootMarkerPrefab: {fileID: 0}
-  _dangerZoneMarkerPrefab: {fileID: 0}
 --- !u!4 &209310943
 Transform:
   m_ObjectHideFlags: 0
@@ -936,6 +937,54 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1029898239
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1029898241}
+  - component: {fileID: 1029898240}
+  m_Layer: 0
+  m_Name: ItemRegistry
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1029898240
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1029898239}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d2368167194dbed4995a31341684382e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.ItemRegistry
+  _weapons: []
+  _armor: []
+  _potions: []
+  _scrolls: []
+--- !u!4 &1029898241
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1029898239}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 470.27863, y: 332.3108, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1058738462
 GameObject:
   m_ObjectHideFlags: 0
@@ -1065,6 +1114,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 03f9a78157816bb4bbc573748a78c791, type: 3}
   m_Name: 
   m_EditorClassIdentifier: DungeonTower.UI::DungeonTower.UI.AbilityBarView
+  _moveButton: {fileID: 0}
+  _moveLabel: {fileID: 0}
   _button1: {fileID: 1175712691}
   _button2: {fileID: 1133898145}
   _label1: {fileID: 376614398}
@@ -2153,106 +2204,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1001 &604815270430579612
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 0}
-    m_Modifications:
-    - target: {fileID: 1997313044985178800, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      propertyPath: m_Pivot.x
-      value: 0.5
-      objectReference: {fileID: 0}
-    - target: {fileID: 1997313044985178800, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      propertyPath: m_Pivot.y
-      value: 0.5
-      objectReference: {fileID: 0}
-    - target: {fileID: 1997313044985178800, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      propertyPath: m_AnchorMax.x
-      value: 0.5
-      objectReference: {fileID: 0}
-    - target: {fileID: 1997313044985178800, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      propertyPath: m_AnchorMax.y
-      value: 0.5
-      objectReference: {fileID: 0}
-    - target: {fileID: 1997313044985178800, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      propertyPath: m_AnchorMin.x
-      value: 0.5
-      objectReference: {fileID: 0}
-    - target: {fileID: 1997313044985178800, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      propertyPath: m_AnchorMin.y
-      value: 0.5
-      objectReference: {fileID: 0}
-    - target: {fileID: 1997313044985178800, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      propertyPath: m_SizeDelta.x
-      value: 20
-      objectReference: {fileID: 0}
-    - target: {fileID: 1997313044985178800, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      propertyPath: m_SizeDelta.y
-      value: 5
-      objectReference: {fileID: 0}
-    - target: {fileID: 1997313044985178800, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      propertyPath: m_LocalPosition.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 1997313044985178800, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      propertyPath: m_LocalPosition.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 1997313044985178800, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      propertyPath: m_LocalPosition.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 1997313044985178800, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      propertyPath: m_LocalRotation.w
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 1997313044985178800, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      propertyPath: m_LocalRotation.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 1997313044985178800, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      propertyPath: m_LocalRotation.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 1997313044985178800, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      propertyPath: m_LocalRotation.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 1997313044985178800, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      propertyPath: m_AnchoredPosition.x
-      value: 717
-      objectReference: {fileID: 0}
-    - target: {fileID: 1997313044985178800, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      propertyPath: m_AnchoredPosition.y
-      value: 217
-      objectReference: {fileID: 0}
-    - target: {fileID: 1997313044985178800, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 1997313044985178800, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 1997313044985178800, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 3862874424933649878, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      propertyPath: m_Name
-      value: LootPrefab
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
-    m_AddedGameObjects: []
-    m_AddedComponents:
-    - targetCorrespondingSourceObject: {fileID: 3862874424933649878, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 0}
-  m_SourcePrefab: {fileID: 100100000, guid: 05e8c20d2e3b60c4fb36f7866b1a4db8, type: 3}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -2263,4 +2214,4 @@ SceneRoots:
   - {fileID: 209310943}
   - {fileID: 1820065806}
   - {fileID: 1058738465}
-  - {fileID: 604815270430579612}
+  - {fileID: 1029898241}

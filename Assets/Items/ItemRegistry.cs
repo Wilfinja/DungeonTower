@@ -37,9 +37,17 @@ namespace DungeonTower.Items
             Index(_scrolls, s => s.Id, _scrollsById, "ScrollId");
         }
 
-        private void Index<TAsset, TId>(
-            List<TAsset> assets, System.Func<TAsset, TId> idOf, Dictionary<TId, TAsset> into, string idLabel)
-            where TAsset : UnityEngine.Object
+        // TValue is deliberately separate from TAsset: weapons/armor are
+        // indexed into Dictionary<TId, IWeapon/IArmor> (the Core
+        // interface) even though the source list is the concrete SO
+        // type, while potions/scrolls are indexed straight into their
+        // own concrete SO type. The "where TAsset : TValue" constraint
+        // is what makes a WeaponSO valid to store as an IWeapon without
+        // forcing the list and dictionary to agree on one exact type —
+        // that mismatch is exactly what made type inference fail before.
+        private void Index<TAsset, TId, TValue>(
+            List<TAsset> assets, System.Func<TAsset, TId> idOf, Dictionary<TId, TValue> into, string idLabel)
+            where TAsset : UnityEngine.Object, TValue
         {
             into.Clear();
             foreach (var asset in assets)
