@@ -1,3 +1,5 @@
+using System;
+
 namespace DungeonTower.Core
 {
     /// <summary>
@@ -6,19 +8,27 @@ namespace DungeonTower.Core
     /// Resist, Crit. This is what armor grants. Unlike StatGrowth (which
     /// feeds Body/Mind/Spirit), this never touches the primary stats —
     /// those only ever grow from leveling.
+    ///
+    /// Plain public fields, not get-only auto-properties, and not a
+    /// readonly struct — Unity's Inspector serializer only picks up
+    /// mutable public fields (or [SerializeField] private ones); a
+    /// get-only-property / readonly-struct version shows as an empty,
+    /// un-editable foldout in ArmorSO's Inspector, with nothing to type
+    /// numbers into.
     /// </summary>
-    public readonly struct DerivedStatBonus
+    [Serializable]
+    public struct DerivedStatBonus
     {
-        public int Hp { get; }
-        public int Mp { get; }
-        public float PhysicalAttack { get; }
-        public float PhysicalDefense { get; }
-        public float MagicAttack { get; }
-        public float MagicDefense { get; }
-        public int Initiative { get; }
-        public int MoveRange { get; }
-        public float StatusResist { get; }
-        public float CritChance { get; }
+        public int Hp;
+        public int Mp;
+        public float PhysicalAttack;
+        public float PhysicalDefense;
+        public float MagicAttack;
+        public float MagicDefense;
+        public int Initiative;
+        public int MoveRange;
+        public float StatusResist;
+        public float CritChance;
 
         public DerivedStatBonus(
             int hp = 0, int mp = 0,

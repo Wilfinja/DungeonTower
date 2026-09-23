@@ -9,10 +9,10 @@ namespace DungeonTower.Core
     public sealed class LootDrop
     {
         public GridPosition Position { get; }
-        public Weapon Weapon { get; }
-        public Armor Armor { get; }
+        public IWeapon Weapon { get; }
+        public IArmor Armor { get; }
 
-        public LootDrop(GridPosition position, Weapon weapon, Armor armor)
+        public LootDrop(GridPosition position, IWeapon weapon, IArmor armor)
         {
             Position = position;
             Weapon = weapon;
