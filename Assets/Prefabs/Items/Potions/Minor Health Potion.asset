@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a62c5325f746ffd4e869d3ca7651689e, type: 3}
+  m_Name: Minor Health Potion
+  m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.PotionSO
+  _potionName: Minor Health Potion
+  _group: 0
+  _requiredStat: 0
+  _requiredStatValue: 0
+  _ability: {fileID: 11400000, guid: 52a4941e9dec24046a210bddcfa76ad3, type: 2}

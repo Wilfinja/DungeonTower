@@ -48,5 +48,12 @@ namespace DungeonTower.Core
             StatusResist = statusResist;
             CritChance = critChance;
         }
+
+        public static DerivedStatBonus operator +(DerivedStatBonus a, DerivedStatBonus b) => new DerivedStatBonus(
+            hp: a.Hp + b.Hp, mp: a.Mp + b.Mp,
+            physicalAttack: a.PhysicalAttack + b.PhysicalAttack, physicalDefense: a.PhysicalDefense + b.PhysicalDefense,
+            magicAttack: a.MagicAttack + b.MagicAttack, magicDefense: a.MagicDefense + b.MagicDefense,
+            initiative: a.Initiative + b.Initiative, moveRange: a.MoveRange + b.MoveRange,
+            statusResist: a.StatusResist + b.StatusResist, critChance: a.CritChance + b.CritChance);
     }
 }

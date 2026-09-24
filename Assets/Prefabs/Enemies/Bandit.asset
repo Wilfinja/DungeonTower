@@ -12,10 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7d025c4405f46f64b90a68ce2e05d202, type: 3}
   m_Name: Bandit
   m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.EnemySO
-  _displayName: 
-  _role: 0
+  _displayName: Bandit
+  _role: 7
   _classId: 0
-  _weaponId: 0
-  _armorId: 0
-  _detectionRadius: 5
-  _alertRadius: 4
+  _weapon: {fileID: 11400000, guid: 29ff215a918935545be78480ff777074, type: 2}
+  _armor: {fileID: 11400000, guid: a0a08febff7ae974b9429d1c71521a6f, type: 2}
+  _detectionRadius: 4
+  _alertRadius: 3

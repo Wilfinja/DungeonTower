@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b3c6b5e23a327447837fee5b5dbebb7, type: 3}
+  m_Name: Arcane Bolt
+  m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.AbilitySO
+  _abilityName: Arcane Bolt
+  _effectKind: 0
+  _kind: 1
+  _damageMultiplier: 1
+  _healHp: 0
+  _healMp: 0
+  _bonus:
+    Hp: 0
+    Mp: 0
+    PhysicalAttack: 0
+    PhysicalDefense: 0
+    MagicAttack: 0
+    MagicDefense: 0
+    Initiative: 0
+    MoveRange: 0
+    StatusResist: 0
+    CritChance: 0
+  _range: 3
+  _areaShape: 0
+  _areaRadius: 0
+  _cooldownTurns: 0

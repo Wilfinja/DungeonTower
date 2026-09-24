@@ -9,6 +9,10 @@ namespace DungeonTower.Core
     /// </summary>
     public interface IScroll : IConsumable
     {
+        // The scroll's category (Fireball, Heal, ...) — same idea as
+        // IWeapon.Group.
+        ScrollId Group { get; }
+
         IAbility Ability { get; }
     }
 }

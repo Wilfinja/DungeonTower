@@ -12,16 +12,18 @@ namespace DungeonTower.Items
     public sealed class ArmorSO : ScriptableObject, IArmor
     {
         [SerializeField] private string _armorName;
-        [SerializeField] private ArmorId _id;
+        [SerializeField] private ArmorId _group;
         [SerializeField] private PrimaryStat _requiredStat;
         [SerializeField, Min(0)] private int _requiredStatValue = 4;
         [SerializeField] private DerivedStatBonus _passiveBonus;
+        [SerializeField] private bool _dropsOnDeath = true;
 
         public string Name => _armorName;
-        public ArmorId Id => _id;
+        public ArmorId Group => _group;
         public PrimaryStat RequiredStat => _requiredStat;
         public int RequiredStatValue => _requiredStatValue;
         public DerivedStatBonus PassiveBonus => _passiveBonus;
+        public bool DropsOnDeath => _dropsOnDeath;
 
         public bool CanEquip(StatBlock stats) => stats.Get(RequiredStat) >= RequiredStatValue;
     }

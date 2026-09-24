@@ -7,6 +7,11 @@ namespace DungeonTower.Core
     /// </summary>
     public enum ScrollId
     {
-        Fireball
+        Arcane,
+        Fire,
+        Frost,
+        Earth,
+        Air,
+
     }
 }

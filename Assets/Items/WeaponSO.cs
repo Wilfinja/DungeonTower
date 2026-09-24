@@ -15,16 +15,18 @@ namespace DungeonTower.Items
     public sealed class WeaponSO : ScriptableObject, IWeapon
     {
         [SerializeField] private string _weaponName;
-        [SerializeField] private WeaponId _id;
+        [SerializeField] private WeaponId _group;
         [SerializeField] private PrimaryStat _requiredStat;
         [SerializeField, Min(0)] private int _requiredStatValue = 4;
         [SerializeField] private List<AbilitySO> _abilities = new List<AbilitySO>();
+        [SerializeField] private bool _dropsOnDeath = true;
 
         public string Name => _weaponName;
-        public WeaponId Id => _id;
+        public WeaponId Group => _group;
         public PrimaryStat RequiredStat => _requiredStat;
         public int RequiredStatValue => _requiredStatValue;
         public IReadOnlyList<IAbility> Abilities => _abilities;
+        public bool DropsOnDeath => _dropsOnDeath;
 
         public bool CanEquip(StatBlock stats) => stats.Get(RequiredStat) >= RequiredStatValue;
 

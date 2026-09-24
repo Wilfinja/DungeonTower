@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d90f8c6f7aa945e47a2656de7d126bc8, type: 3}
+  m_Name: Woven Robe
+  m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.ArmorSO
+  _armorName: Woven Robe
+  _group: 1
+  _requiredStat: 1
+  _requiredStatValue: 5
+  _passiveBonus:
+    Hp: 2
+    Mp: 2
+    PhysicalAttack: 0
+    PhysicalDefense: 1
+    MagicAttack: 0
+    MagicDefense: 2
+    Initiative: 0
+    MoveRange: 0
+    StatusResist: 0
+    CritChance: 0
+  _dropsOnDeath: 1

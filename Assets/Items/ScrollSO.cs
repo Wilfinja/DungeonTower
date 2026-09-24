@@ -15,13 +15,13 @@ namespace DungeonTower.Items
     public sealed class ScrollSO : ScriptableObject, IScroll
     {
         [SerializeField] private string _scrollName;
-        [SerializeField] private ScrollId _id;
+        [SerializeField] private ScrollId _group;
         [SerializeField] private PrimaryStat _requiredStat;
         [SerializeField, Min(0)] private int _requiredStatValue;
         [SerializeField] private AbilitySO _ability;
 
         public string Name => _scrollName;
-        public ScrollId Id => _id;
+        public ScrollId Group => _group;
         public PrimaryStat RequiredStat => _requiredStat;
         public int RequiredStatValue => _requiredStatValue;
         public IAbility Ability => _ability;

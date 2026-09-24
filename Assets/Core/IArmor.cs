@@ -10,10 +10,18 @@ namespace DungeonTower.Core
     public interface IArmor
     {
         string Name { get; }
-        ArmorId Id { get; }
+
+        // The armor's category (Plate, Robe, Cloak, ...) — same idea as
+        // IWeapon.Group.
+        ArmorId Group { get; }
         PrimaryStat RequiredStat { get; }
         int RequiredStatValue { get; }
         DerivedStatBonus PassiveBonus { get; }
+
+        // False for something intrinsic to the creature (thick hide,
+        // etc.) rather than a real piece of gear, so it never shows up
+        // as loot when that unit dies.
+        bool DropsOnDeath { get; }
 
         bool CanEquip(StatBlock stats);
     }

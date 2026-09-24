@@ -37,13 +37,45 @@ namespace DungeonTower.UI
         [SerializeField] private AbilityBarView _abilityBar;
         [SerializeField] private InventoryPanelView _inventoryPanel;
         [SerializeField] private GameObject _inventoryToggleButton;
-        [SerializeField] private ItemRegistry _itemRegistry;
         [SerializeField] private ThemeRegistry _themeRegistry;
         [SerializeField] private GameObject _lootMarkerPrefab;
         [SerializeField] private GameObject _dangerZoneMarkerPrefab;
         [SerializeField] private LootWindowView _lootWindow;
+        [SerializeField] private TurnTrackerView _turnTracker;
         [SerializeField] private GameObject _lootToggleButton;
+        [SerializeField] private HealthBarView _healthBarPrefab;
+        [SerializeField] private RectTransform _healthBarContainer;
         [SerializeField] private List<Chest> _chests = new List<Chest>();
+
+        // The player's starting kit — direct asset references, same
+        // reasoning as EnemySO: no ID to keep in sync, just drag the
+        // weapon/armor you want in here.
+        [SerializeField] private WeaponSO _warriorWeapon;
+        [SerializeField] private ArmorSO _warriorArmor;
+        [SerializeField] private WeaponSO _adeptWeapon;
+        [SerializeField] private ArmorSO _adeptArmor;
+
+        // Spare starting inventory (unequipped) — lists rather than
+        // fixed fields since this is naturally variable-length; to
+        // start with 2 Health Potions, just drag that asset into the
+        // list twice.
+        [SerializeField] private List<WeaponSO> _startingSpareWeapons = new List<WeaponSO>();
+        [SerializeField] private List<ArmorSO> _startingSpareArmor = new List<ArmorSO>();
+        [SerializeField] private List<PotionSO> _startingPotions = new List<PotionSO>();
+        [SerializeField] private List<ScrollSO> _startingScrolls = new List<ScrollSO>();
+
+        // PLACEHOLDER pending a real belt-loading screen: what each
+        // hero's belt starts the game with, authored directly rather
+        // than assigned in-editor. Each list entry fills one belt slot
+        // in order (repeat an asset to give it more than one slot's
+        // worth — see LoadBeltFromLists); this is independent of the
+        // shared-stash lists above, not drawn from them, purely for
+        // testing until belt-loading exists.
+        [SerializeField] private List<PotionSO> _warriorStartingPotions = new List<PotionSO>();
+        [SerializeField] private List<ScrollSO> _warriorStartingScrolls = new List<ScrollSO>();
+        [SerializeField] private List<PotionSO> _adeptStartingPotions = new List<PotionSO>();
+        [SerializeField] private List<ScrollSO> _adeptStartingScrolls = new List<ScrollSO>();
+
         [SerializeField] private int _mapWidth = 24;
         [SerializeField] private int _mapHeight = 16;
 
@@ -177,12 +209,31 @@ namespace DungeonTower.UI
         // out Sword/Plate since those are already equipped at the start.
         private void SeedStartingInventory()
         {
-            _inventory.AddWeapon(_itemRegistry.GetWeapon(WeaponId.Bow));
-            _inventory.AddWeapon(_itemRegistry.GetWeapon(WeaponId.Staff));
-            _inventory.AddArmor(_itemRegistry.GetArmor(ArmorId.Cloak));
-            _inventory.AddArmor(_itemRegistry.GetArmor(ArmorId.Robe));
-            _inventory.AddPotion(_itemRegistry.GetPotion(PotionId.HealthPotion), 2);
-            _inventory.AddScroll(_itemRegistry.GetScroll(ScrollId.Fireball), 1);
+            foreach (var weapon in _startingSpareWeapons) _inventory.AddWeapon(weapon);
+            foreach (var armor in _startingSpareArmor) _inventory.AddArmor(armor);
+            foreach (var potion in _startingPotions) _inventory.AddPotion(potion);
+            foreach (var scroll in _startingScrolls) _inventory.AddScroll(scroll);
+        }
+
+        // PLACEHOLDER for a real belt-loading screen: packs each list
+        // into consecutive belt slots, grouping repeated entries into
+        // one slot's stack count (so listing "Health Potion" twice
+        // fills one slot with a count of 2, rather than using two
+        // slots). Potions fill slots first, then scrolls; anything past
+        // the belt's slot count is silently dropped.
+        private static void LoadBeltFromLists(Belt belt, List<PotionSO> potions, List<ScrollSO> scrolls)
+        {
+            int slot = 0;
+            foreach (var group in potions.GroupBy(p => p))
+            {
+                if (slot >= belt.SlotCount) return;
+                belt.SetSlot(slot++, group.Key, group.Count());
+            }
+            foreach (var group in scrolls.GroupBy(s => s))
+            {
+                if (slot >= belt.SlotCount) return;
+                belt.SetSlot(slot++, group.Key, group.Count());
+            }
         }
 
         private const int CorridorRoamRadius = 6;
@@ -206,13 +257,15 @@ namespace DungeonTower.UI
 
             var warrior = new CombatUnit("Warrior", Faction.Player,
                 new UnitStats(ClassLibrary.Get(ClassId.Warrior)), playerSpawns[0]);
-            warrior.TryEquip(_itemRegistry.GetWeapon(WeaponId.Sword));
-            warrior.Stats.TryEquipArmor(_itemRegistry.GetArmor(ArmorId.Plate));
+            warrior.TryEquip(_warriorWeapon);
+            warrior.Stats.TryEquipArmor(_warriorArmor);
+            LoadBeltFromLists(warrior.Belt, _warriorStartingPotions, _warriorStartingScrolls);
 
             var adept = new CombatUnit("Adept", Faction.Player,
                 new UnitStats(ClassLibrary.Get(ClassId.Adept)), playerSpawns[1]);
-            adept.TryEquip(_itemRegistry.GetWeapon(WeaponId.Staff));
-            adept.Stats.TryEquipArmor(_itemRegistry.GetArmor(ArmorId.Robe));
+            adept.TryEquip(_adeptWeapon);
+            adept.Stats.TryEquipArmor(_adeptArmor);
+            LoadBeltFromLists(adept.Belt, _adeptStartingPotions, _adeptStartingScrolls);
 
             var units = new List<CombatUnit> { warrior, adept };
             units.AddRange(BuildEnemyRoster(dungeon, playerSpawns));
@@ -307,8 +360,8 @@ namespace DungeonTower.UI
             var unit = new CombatUnit(enemySO.DisplayName, Faction.Enemy,
                 new UnitStats(ClassLibrary.Get(enemySO.ClassId)), position,
                 enemySO.DetectionRadius, enemySO.AlertRadius);
-            unit.TryEquip(_itemRegistry.GetWeapon(enemySO.WeaponId));
-            unit.Stats.TryEquipArmor(_itemRegistry.GetArmor(enemySO.ArmorId));
+            unit.TryEquip(enemySO.Weapon);
+            unit.Stats.TryEquipArmor(enemySO.Armor);
             return unit;
         }
 
@@ -368,6 +421,8 @@ namespace DungeonTower.UI
             char symbol = unit.DisplayName[0];
             view.Bind(unit, symbol);
             _unitViews[unit] = view;
+            var bar = Instantiate(_healthBarPrefab, _healthBarContainer);
+            bar.Bind(unit);
         }
 
         private void BeginTurn()
@@ -380,12 +435,16 @@ namespace DungeonTower.UI
                 _inventoryToggleButton.SetActive(false);
                 if (_lootWindow != null) _lootWindow.Hide();
                 if (_lootToggleButton != null) _lootToggleButton.SetActive(false);
+                if (_turnTracker != null) _turnTracker.Hide();
                 return;
             }
 
             var unit = _battle.CurrentUnit;
             Debug.Log($"Round {_battle.RoundNumber} — {unit.DisplayName}'s turn ({unit.Faction})");
+            unit.TickCooldowns();
             RefreshTurnHighlight();
+            if (_turnTracker != null)
+                _turnTracker.Refresh(_battle.GetTurnOrder(), _battle.CurrentUnit, IsInCombat());
             RefreshDangerZoneMarkers();
             _gridView.ClearHighlights();
             _pendingScroll = null;
@@ -395,10 +454,10 @@ namespace DungeonTower.UI
             if (unit.Faction == Faction.Player)
             {
                 _inventoryToggleButton.SetActive(true);
-                _inventoryPanel.SetTargetMode(IsInCombat(), _partyMembers.IndexOf(unit));
+                _inventoryPanel.SetTargetMode(IsInCombat(), _partyMembers.IndexOf(unit), unit.Belt);
                 RefreshLootAvailability(unit);
 
-                if (unit.EquippedWeapon != null) _abilityBar.Show(unit.EquippedWeapon);
+                if (unit.EquippedWeapon != null) _abilityBar.Show(unit.EquippedWeapon, unit.GetRemainingCooldown);
                 else _abilityBar.ShowMoveOnly();
 
                 SetMode(ActionMode.Move);
@@ -463,6 +522,13 @@ namespace DungeonTower.UI
             if (unit.Faction != Faction.Player || unit.EquippedWeapon == null) return;
             if (index < 0 || index >= unit.EquippedWeapon.Abilities.Count) return;
 
+            var ability = unit.EquippedWeapon.Abilities[index];
+            if (unit.IsOnCooldown(ability))
+            {
+                Debug.Log($"{ability.Name} is on cooldown ({unit.GetRemainingCooldown(ability)} turn(s) left).");
+                return;
+            }
+
             SetMode(ActionMode.Ability, index);
         }
 
@@ -511,24 +577,62 @@ namespace DungeonTower.UI
 
         // Potions resolve immediately (self/ally heal, no grid target
         // needed) — same turn-cost rule as equipping.
-        private void OnPotionUseRequested(IPotion potion, int targetIndex)
+        // Potions always act on whoever's turn it currently is — there's
+        // no target switcher involved, and the item comes out of their
+        // own belt, not the shared party stash. Same turn-cost rule as
+        // equipping: free out of combat, costs the turn once alerted.
+        private void OnPotionUseRequested(IPotion potion)
         {
             if (_battle == null || _battle.Outcome != BattleOutcome.InProgress) return;
-            var unit = ResolveEquipTarget(targetIndex);
-            if (unit == null) return;
+            var unit = _battle.CurrentUnit;
+            if (unit.Faction != Faction.Player) return;
+
             if (!potion.CanUse(unit.Stats.Current))
             {
                 Debug.Log($"{unit.DisplayName} cannot use {potion.Name} — stat requirement not met");
                 return;
             }
-            if (!_inventory.TryConsumePotion(potion)) return;
+            if (potion.Ability != null && unit.IsOnCooldown(potion.Ability))
+            {
+                Debug.Log($"{potion.Name} cannot be used yet — {potion.Ability.Name} is on cooldown ({unit.GetRemainingCooldown(potion.Ability)} turn(s) left).");
+                return;
+            }
+            if (!unit.Belt.TryConsume(potion))
+            {
+                Debug.Log($"{unit.DisplayName}'s belt doesn't have {potion.Name}.");
+                return;
+            }
 
-            unit.Heal(potion.HealHp);
-            unit.RestoreMp(potion.HealMp);
-            _unitViews[unit].Refresh();
-            Debug.Log($"{unit.DisplayName} drinks {potion.Name} (+{potion.HealHp} HP, +{potion.HealMp} MP)");
-
+            ApplyPotionEffect(unit, potion);
             ResolveEquipCost();
+        }
+
+        // Heal/Buff are the meaningful cases for a self-used potion;
+        // Damage is accepted (nothing stops authoring it) but doesn't
+        // make sense here, so it's just logged and skipped.
+        private void ApplyPotionEffect(CombatUnit unit, IPotion potion)
+        {
+            var ability = potion.Ability;
+            if (ability == null) return;
+
+            unit.TriggerCooldown(ability);
+
+            switch (ability.EffectKind)
+            {
+                case EffectKind.Heal:
+                    unit.Heal(ability.HealHp);
+                    unit.RestoreMp(ability.HealMp);
+                    break;
+                case EffectKind.Buff:
+                    unit.Stats.AddBonus(ability.Bonus);
+                    break;
+                default:
+                    Debug.LogWarning($"{potion.Name}'s ability is {ability.EffectKind}-kind, which isn't meaningful for a self-used potion — nothing happened.");
+                    break;
+            }
+
+            _unitViews[unit].Refresh();
+            Debug.Log($"{unit.DisplayName} uses {potion.Name}.");
         }
 
         // Scrolls are different: reading one aims its ability at the
@@ -536,19 +640,20 @@ namespace DungeonTower.UI
         // away. The scroll is only actually consumed once a valid
         // target tile is clicked (see HandleAbilityClick) — cancelling
         // via Move/right-click/Escape leaves it in the inventory.
-        private void OnScrollUseRequested(IScroll scroll, int targetIndex)
+        private void OnScrollUseRequested(IScroll scroll)
         {
             if (_battle == null || _battle.Outcome != BattleOutcome.InProgress) return;
-            var unit = ResolveEquipTarget(targetIndex);
-            if (unit == null || unit != _battle.CurrentUnit)
-            {
-                Debug.Log("Can only use items for whoever's turn it currently is.");
-                return;
-            }
+            var unit = _battle.CurrentUnit;
+            if (unit.Faction != Faction.Player) return;
             if (scroll.Ability == null) return;
             if (!scroll.CanUse(unit.Stats.Current))
             {
                 Debug.Log($"{unit.DisplayName} cannot read {scroll.Name} — stat requirement not met");
+                return;
+            }
+            if (unit.IsOnCooldown(scroll.Ability))
+            {
+                Debug.Log($"{scroll.Name} cannot be read yet — {scroll.Ability.Name} is on cooldown ({unit.GetRemainingCooldown(scroll.Ability)} turn(s) left).");
                 return;
             }
 
@@ -600,17 +705,22 @@ namespace DungeonTower.UI
             if (ability == null) return new List<GridPosition>();
 
             if (ability.AreaShape == AttackShape.Single)
-                return GetAttackableEnemyTiles(unit, ability);
+                return GetSingleTargetTiles(unit, ability);
 
             return AreaOfEffect.GetAffectedTiles(unit.Position, unit.Position, AttackShape.Blast, ability.Range)
                 .Where(InBounds)
                 .ToList();
         }
 
-        private List<GridPosition> GetAttackableEnemyTiles(CombatUnit unit, IAbility ability)
+        // Damage targets enemies; Heal/Buff target allies (the caster's
+        // own tile included, so a single-target heal can be cast on
+        // yourself).
+        private List<GridPosition> GetSingleTargetTiles(CombatUnit unit, IAbility ability)
         {
+            bool targetAllies = ability.EffectKind != EffectKind.Damage;
             return _unitViews.Keys
-                .Where(u => u.IsAlive && u.Faction != unit.Faction
+                .Where(u => u.IsAlive
+                    && (targetAllies ? u.Faction == unit.Faction : u.Faction != unit.Faction)
                     && u.Position.ManhattanDistance(unit.Position) <= ability.Range
                     && LineOfSight.HasClearPath(unit.Position, u.Position, _map))
                 .Select(u => u.Position)
@@ -742,7 +852,7 @@ namespace DungeonTower.UI
             if (!GetValidAbilityTargetTiles(acting, ability).Contains(target)) return;
 
             ExecuteAbilityAt(acting, ability, target);
-            if (isScroll) _inventory.TryConsumeScroll(_pendingScroll);
+            if (isScroll) acting.Belt.TryConsume(_pendingScroll);
             _pendingScroll = null;
 
             EndTurn();
@@ -847,32 +957,65 @@ namespace DungeonTower.UI
             return _unitViews.Keys.FirstOrDefault(u => u.IsAlive && u.Position.Equals(position));
         }
 
-        // Dispatches to single-target or AoE resolution depending on the
-        // ability's shape — the one place both HandleAbilityClick and
-        // RunEnemyTurn go through, so an enemy wielding an AoE weapon
-        // "just works" the same way a player's does. Each kill (single
-        // or AoE) drops loot via HandleDeath.
+        // Dispatches to every target within the ability's footprint —
+        // the one place both HandleAbilityClick and RunEnemyTurn go
+        // through, so an enemy wielding an AoE weapon "just works" the
+        // same way a player's does. What happens to each target is
+        // decided per-target by ApplyAbilityEffect (Damage/Heal/Buff),
+        // since that decision doesn't depend on Single vs AoE.
         private void ExecuteAbilityAt(CombatUnit attacker, IAbility ability, GridPosition impactTile)
         {
+            attacker.TriggerCooldown(ability);
+
             if (ability.AreaShape == AttackShape.Single)
             {
-                var defender = FindLivingUnitAt(impactTile);
-                if (defender == null) return;
-                ResolveAttack(attacker, defender, ability);
+                var target = FindLivingUnitAt(impactTile);
+                if (target == null) return;
+                ApplyAbilityEffect(attacker, target, ability);
                 return;
             }
 
-            var hits = AttackResolver.ResolveAoE(attacker, ability, impactTile, _unitViews.Keys, _rng);
-            foreach (var (target, result) in hits)
-            {
-                bool wasAlive = target.IsAlive;
-                target.ApplyDamage(result.Damage);
-                AlertUnit(target);
-                _unitViews[target].Refresh();
-                Debug.Log($"{attacker.DisplayName} uses {ability.Name} on {target.DisplayName} for {result.Damage} {ability.Kind}{(result.IsCrit ? " (CRIT)" : "")} (AoE)");
+            var affectedTiles = new HashSet<GridPosition>(
+                AreaOfEffect.GetAffectedTiles(attacker.Position, impactTile, ability.AreaShape, ability.AreaRadius));
 
-                if (wasAlive && !target.IsAlive)
-                    HandleDeath(target);
+            // Damage AoE excludes the caster (allies can still be caught
+            // in it, same as most tactics games); Heal/Buff AoE includes
+            // them, since standing in your own heal nova should heal
+            // you too.
+            bool excludeCaster = ability.EffectKind == EffectKind.Damage;
+
+            foreach (var target in _unitViews.Keys.ToList())
+            {
+                if (!target.IsAlive) continue;
+                if (excludeCaster && target == attacker) continue;
+                if (!affectedTiles.Contains(target.Position)) continue;
+                ApplyAbilityEffect(attacker, target, ability);
+            }
+        }
+
+        // Damage goes through the existing crit/defense resolution (and
+        // can kill/drop loot, via ResolveAttack); Heal/Buff are simple
+        // enough — no RNG, no defense — that they're applied directly
+        // here instead of needing their own resolver class.
+        private void ApplyAbilityEffect(CombatUnit attacker, CombatUnit target, IAbility ability)
+        {
+            switch (ability.EffectKind)
+            {
+                case EffectKind.Damage:
+                    ResolveAttack(attacker, target, ability);
+                    break;
+
+                case EffectKind.Heal:
+                    target.Heal(ability.HealHp);
+                    target.RestoreMp(ability.HealMp);
+                    _unitViews[target].Refresh();
+                    Debug.Log($"{attacker.DisplayName} uses {ability.Name} on {target.DisplayName}, restoring {ability.HealHp} HP / {ability.HealMp} MP.");
+                    break;
+
+                case EffectKind.Buff:
+                    target.Stats.AddBonus(ability.Bonus);
+                    Debug.Log($"{attacker.DisplayName} uses {ability.Name} on {target.DisplayName}, granting a bonus.");
+                    break;
             }
         }
 
@@ -896,9 +1039,16 @@ namespace DungeonTower.UI
         {
             Debug.Log($"{unit.DisplayName} has fallen.");
 
-            if (unit.EquippedWeapon != null || unit.Stats.EquippedArmor != null)
+            // A natural weapon/armor (claws, thick hide, etc.) never
+            // shows up as loot — only real gear does.
+            var droppedWeapon = unit.EquippedWeapon != null && unit.EquippedWeapon.DropsOnDeath
+                ? unit.EquippedWeapon : null;
+            var droppedArmor = unit.Stats.EquippedArmor != null && unit.Stats.EquippedArmor.DropsOnDeath
+                ? unit.Stats.EquippedArmor : null;
+
+            if (droppedWeapon != null || droppedArmor != null)
             {
-                _lootOnGround.Add(new LootDrop(unit.Position, unit.EquippedWeapon, unit.Stats.EquippedArmor));
+                _lootOnGround.Add(new LootDrop(unit.Position, droppedWeapon, droppedArmor));
                 SpawnLootMarker(unit.Position);
             }
         }
@@ -1133,10 +1283,19 @@ namespace DungeonTower.UI
             return weapon.Abilities[index];
         }
 
+        // Tries each of the weapon's abilities in order and uses the
+        // first one that isn't on cooldown; null if every one is (the
+        // enemy just moves this turn instead of attacking).
         private IAbility GetEnemyActiveAbility(CombatUnit unit)
         {
             var weapon = unit.EquippedWeapon;
-            return weapon != null && weapon.Abilities.Count > 0 ? weapon.Abilities[0] : null;
+            if (weapon == null) return null;
+
+            foreach (var ability in weapon.Abilities)
+                if (!unit.IsOnCooldown(ability))
+                    return ability;
+
+            return null;
         }
 
         private void EndTurn()

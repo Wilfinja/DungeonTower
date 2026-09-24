@@ -13,6 +13,8 @@ namespace DungeonTower.Combat
     {
         private readonly Queue<CombatUnit> _order = new Queue<CombatUnit>();
 
+        public IEnumerable<CombatUnit> Remaining => _order;
+
         public int RoundNumber { get; private set; }
         public bool HasNext => _order.Count > 0;
 

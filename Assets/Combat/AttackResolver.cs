@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using DungeonTower.Core;
 
 namespace DungeonTower.Combat
@@ -18,12 +16,18 @@ namespace DungeonTower.Combat
     }
 
     /// <summary>
-    /// Resolves a single attack using a specific ability from the
-    /// attacker's equipped weapon — the ability's Kind decides whether
-    /// Physical or Magic Attack/Defense apply, and its DamageMultiplier
-    /// scales the attacker's raw stat before defense is subtracted. No
-    /// accuracy/evasion stat exists yet, so every attack is assumed to
-    /// hit. Crit multiplier is a placeholder.
+    /// Resolves a single Damage-kind ability hitting one target — the
+    /// ability's Kind decides whether Physical or Magic Attack/Defense
+    /// apply, and its DamageMultiplier scales the attacker's raw stat
+    /// before defense is subtracted. No accuracy/evasion stat exists
+    /// yet, so every attack is assumed to hit. Crit multiplier is a
+    /// placeholder.
+    ///
+    /// Heal/Buff-kind abilities don't go through here at all — they're
+    /// simple enough (no RNG, no defense) that BattleController applies
+    /// them directly per target. AoE fan-out (which units in the
+    /// footprint get hit) also lives in BattleController now, since that
+    /// decision differs by EffectKind — see ExecuteAbilityAt.
     /// </summary>
     public static class AttackResolver
     {
@@ -45,26 +49,6 @@ namespace DungeonTower.Combat
             if (isCrit) rawDamage *= CritDamageMultiplier;
 
             return new AttackResult(isCrit, (int)Math.Round(rawDamage, MidpointRounding.AwayFromZero));
-        }
-
-        // AoE variant: resolves the same ability against every living
-        // unit standing in its footprint (via AreaOfEffect), excluding
-        // the attacker itself. Deliberately does NOT exclude the
-        // attacker's own faction — a Blast/Line/Cone can catch allies
-        // caught in the radius, same as most tactics games. Restrict the
-        // candidate list to one faction at the call site if you want
-        // friendly fire off for a particular ability.
-        public static List<(CombatUnit Target, AttackResult Result)> ResolveAoE(
-            CombatUnit attacker, IAbility ability, GridPosition impactTile,
-            IEnumerable<CombatUnit> candidates, Random rng)
-        {
-            var affectedTiles = new HashSet<GridPosition>(
-                AreaOfEffect.GetAffectedTiles(attacker.Position, impactTile, ability.AreaShape, ability.AreaRadius));
-
-            return candidates
-                .Where(u => u.IsAlive && u != attacker && affectedTiles.Contains(u.Position))
-                .Select(u => (u, Resolve(attacker, u, ability, rng)))
-                .ToList();
         }
     }
 }

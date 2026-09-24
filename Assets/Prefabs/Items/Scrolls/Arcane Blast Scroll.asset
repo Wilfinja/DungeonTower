@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a531d51d91c889141b48d075cee6fab2, type: 3}
+  m_Name: Arcane Blast Scroll
+  m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.ScrollSO
+  _scrollName: Arcane Blast
+  _group: 0
+  _requiredStat: 1
+  _requiredStatValue: 3
+  _ability: {fileID: 11400000, guid: bf3a120e124f11e4c9983a2d3b20a3c4, type: 2}

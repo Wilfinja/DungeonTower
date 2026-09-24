@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e5cef53eb1f2df04b9775a6e42b8dffe, type: 3}
+  m_Name: Iron Spear
+  m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.WeaponSO
+  _weaponName: Iron Spear
+  _group: 0
+  _requiredStat: 0
+  _requiredStatValue: 5
+  _abilities:
+  - {fileID: 11400000, guid: 6ffa938b35f4b8643a57aaa3d34ccbd3, type: 2}
+  - {fileID: 11400000, guid: bfd0245a9632efe49a483ba1b7ca0753, type: 2}
+  _dropsOnDeath: 1

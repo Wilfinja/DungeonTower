@@ -58,5 +58,12 @@ namespace DungeonTower.Combat
             if (!anyEnemyAlive) return BattleOutcome.PlayerVictory;
             return BattleOutcome.InProgress;
         }
+
+        public IEnumerable<CombatUnit> GetTurnOrder()
+        {
+            if (CurrentUnit != null) yield return CurrentUnit;
+            foreach (var unit in _turnOrder.Remaining)
+                if (unit.IsAlive) yield return unit;
+        }
     }
 }

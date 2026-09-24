@@ -12,12 +12,18 @@ namespace DungeonTower.Combat
     /// </summary>
     public sealed class CombatUnit
     {
+        // Fixed for every unit for now — not something enemies use yet,
+        // but harmless to give them one too rather than special-casing
+        // by faction.
+        private const int BeltSlotCount = 4;
+
         public string DisplayName { get; }
         public Faction Faction { get; }
         public UnitStats Stats { get; }
         public IWeapon EquippedWeapon { get; private set; }
         public int DetectionRadius { get; }
         public int AlertRadius { get; }
+        public Belt Belt { get; } = new Belt(BeltSlotCount);
 
         public GridPosition Position { get; set; }
         public int CurrentHp { get; private set; }
@@ -40,6 +46,43 @@ namespace DungeonTower.Combat
 
         public void SetRoamZone(IEnumerable<GridPosition> zone)
             => RoamZone = zone != null ? new HashSet<GridPosition>(zone) : null;
+
+        // Remaining cooldown per ability this unit has actually used —
+        // keyed by the ability reference itself rather than by weapon
+        // slot index, so it works the same whether the ability came
+        // from an equipped weapon or a cast scroll. An ability never
+        // used yet, or one with no cooldown at all, simply has no entry
+        // here — IsOnCooldown/GetRemainingCooldown both treat "absent"
+        // as "ready."
+        private readonly Dictionary<IAbility, int> _cooldowns = new Dictionary<IAbility, int>();
+
+        public bool IsOnCooldown(IAbility ability) => GetRemainingCooldown(ability) > 0;
+
+        public int GetRemainingCooldown(IAbility ability)
+            => ability != null && _cooldowns.TryGetValue(ability, out var remaining) ? remaining : 0;
+
+        // Called once, right when the ability is actually used.
+        public void TriggerCooldown(IAbility ability)
+        {
+            if (ability != null && ability.CooldownTurns > 0)
+                _cooldowns[ability] = ability.CooldownTurns;
+        }
+
+        // Called once at the start of this unit's own turn — ticks every
+        // tracked ability down by one, dropping it once it reaches 0 so
+        // the dictionary never accumulates stale zero-entries.
+        public void TickCooldowns()
+        {
+            if (_cooldowns.Count == 0) return;
+
+            var abilities = new List<IAbility>(_cooldowns.Keys);
+            foreach (var ability in abilities)
+            {
+                int remaining = _cooldowns[ability] - 1;
+                if (remaining <= 0) _cooldowns.Remove(ability);
+                else _cooldowns[ability] = remaining;
+            }
+        }
 
         public CombatUnit(string displayName, Faction faction, UnitStats stats, GridPosition startPosition,
             int detectionRadius = 5, int alertRadius = 4)

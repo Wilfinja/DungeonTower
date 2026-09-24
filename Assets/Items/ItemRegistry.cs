@@ -31,10 +31,10 @@ namespace DungeonTower.Items
 
         private void Awake()
         {
-            Index(_weapons, w => w.Id, _weaponsById, "WeaponId");
-            Index(_armor, a => a.Id, _armorById, "ArmorId");
-            Index(_potions, p => p.Id, _potionsById, "PotionId");
-            Index(_scrolls, s => s.Id, _scrollsById, "ScrollId");
+            Index(_weapons, w => w.Group, _weaponsById, "WeaponId");
+            Index(_armor, a => a.Group, _armorById, "ArmorId");
+            Index(_potions, p => p.Group, _potionsById, "PotionId");
+            Index(_scrolls, s => s.Group, _scrollsById, "ScrollId");
         }
 
         // TValue is deliberately separate from TAsset: weapons/armor are
