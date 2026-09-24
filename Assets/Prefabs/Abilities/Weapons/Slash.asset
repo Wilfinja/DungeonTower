@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9b3c6b5e23a327447837fee5b5dbebb7, type: 3}
   m_Name: Slash
   m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.AbilitySO
-  _abilityName: 
+  _abilityName: Slash
   _kind: 0
   _range: 1
   _damageMultiplier: 1

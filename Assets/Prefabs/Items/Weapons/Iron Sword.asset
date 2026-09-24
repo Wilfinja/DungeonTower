@@ -10,10 +10,11 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e5cef53eb1f2df04b9775a6e42b8dffe, type: 3}
-  m_Name: RustedSword
+  m_Name: Iron Sword
   m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.WeaponSO
-  _weaponName: Sword
+  _weaponName: RustedSword
   _id: 0
   _requiredStat: 0
   _requiredStatValue: 4
-  _abilities: []
+  _abilities:
+  - {fileID: 11400000, guid: 64cbc98af4b245b4495602a2103c1f04, type: 2}
