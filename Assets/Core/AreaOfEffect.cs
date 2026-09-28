@@ -20,6 +20,9 @@ namespace DungeonTower.Core
     /// Clicking the caster's own tile (zero displacement) defaults to
     /// facing +X — an arbitrary placeholder for an edge case that
     /// shouldn't come up in practice.
+    ///
+    /// Chain has no entry here — see AttackShape's doc comment — so it
+    /// falls into the default case below like Single does.
     /// </summary>
     public static class AreaOfEffect
     {
@@ -34,7 +37,11 @@ namespace DungeonTower.Core
                     return LineTiles(casterPosition, impactTile, areaRadius);
                 case AttackShape.Cone:
                     return ConeTiles(casterPosition, impactTile, areaRadius);
-                default: // Single
+                case AttackShape.Ring:
+                    return RingTiles(impactTile, areaRadius);
+                case AttackShape.Cross:
+                    return CrossTiles(impactTile, areaRadius);
+                default: // Single, Chain
                     return new List<GridPosition> { impactTile };
             }
         }
@@ -81,6 +88,41 @@ namespace DungeonTower.Core
                 int centerY = caster.Y + dy * step;
                 for (int spread = -(step - 1); spread <= step - 1; spread++)
                     tiles.Add(new GridPosition(centerX + perpX * spread, centerY + perpY * spread));
+            }
+            return tiles;
+        }
+
+        // The hollow boundary of BlastTiles' diamond — every tile at
+        // EXACTLY Manhattan distance `radius` from center, center itself
+        // excluded. Degenerate (empty) at radius 0, since a ring needs
+        // a positive radius to have a boundary at all.
+        private static List<GridPosition> RingTiles(GridPosition center, int radius)
+        {
+            var tiles = new List<GridPosition>();
+            if (radius <= 0) return tiles;
+
+            for (int dx = -radius; dx <= radius; dx++)
+            {
+                int dy = radius - Math.Abs(dx);
+                tiles.Add(new GridPosition(center.X + dx, center.Y + dy));
+                if (dy != 0) tiles.Add(new GridPosition(center.X + dx, center.Y - dy));
+            }
+            return tiles;
+        }
+
+        // A plus/cross centered on `center`: the center tile plus each
+        // of the 4 cardinal arms extended out `radius` tiles — cheaper
+        // and more surgical than a full Blast at the same radius, since
+        // it skips the diagonal-ish infill Blast's diamond includes.
+        private static List<GridPosition> CrossTiles(GridPosition center, int radius)
+        {
+            var tiles = new List<GridPosition> { center };
+            for (int i = 1; i <= radius; i++)
+            {
+                tiles.Add(new GridPosition(center.X + i, center.Y));
+                tiles.Add(new GridPosition(center.X - i, center.Y));
+                tiles.Add(new GridPosition(center.X, center.Y + i));
+                tiles.Add(new GridPosition(center.X, center.Y - i));
             }
             return tiles;
         }

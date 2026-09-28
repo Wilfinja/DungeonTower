@@ -23,8 +23,19 @@ namespace DungeonTower.Combat
         public IWeapon EquippedWeapon { get; private set; }
         public int DetectionRadius { get; }
         public int AlertRadius { get; }
+        public EnemyTargetingStrategy TargetingStrategy { get; }
+        public int TargetingRange { get; }
+        public SupportTargetingStrategy SupportTargetingStrategy { get; }
+        public float SupportHealThreshold { get; }
         public Belt Belt { get; } = new Belt(BeltSlotCount);
         public StatusEffectTracker Status { get; }
+
+        // What this unit (and its alerted pack — see
+        // BattleController.RecordSighting) last actually saw of each
+        // hostile. Present on every unit for the same reason
+        // TargetingStrategy etc. are — harmless and simply unused on a
+        // player-controlled one.
+        public TargetMemory Memory { get; } = new TargetMemory();
 
         public GridPosition Position { get; set; }
         public int CurrentHp { get; private set; }
@@ -86,7 +97,11 @@ namespace DungeonTower.Combat
         }
 
         public CombatUnit(string displayName, Faction faction, UnitStats stats, GridPosition startPosition,
-            int detectionRadius = 5, int alertRadius = 4)
+    int detectionRadius = 5, int alertRadius = 4,
+    EnemyTargetingStrategy targetingStrategy = EnemyTargetingStrategy.Nearest,
+    int targetingRange = 8,
+    SupportTargetingStrategy supportTargetingStrategy = SupportTargetingStrategy.LowestHpPercent,
+    float supportHealThreshold = 50f)
         {
             DisplayName = displayName;
             Faction = faction;
@@ -94,6 +109,10 @@ namespace DungeonTower.Combat
             Position = startPosition;
             DetectionRadius = detectionRadius;
             AlertRadius = alertRadius;
+            TargetingStrategy = targetingStrategy;
+            TargetingRange = targetingRange;
+            SupportTargetingStrategy = supportTargetingStrategy;
+            SupportHealThreshold = supportHealThreshold;
             CurrentHp = stats.MaxHp;
             CurrentMp = stats.MaxMp;
             Status = new StatusEffectTracker(this);

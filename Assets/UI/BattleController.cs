@@ -5,10 +5,8 @@ using DungeonTower.Items;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using static UnityEngine.GraphicsBuffer;
 
 namespace DungeonTower.UI
 {
@@ -42,6 +40,12 @@ namespace DungeonTower.UI
         [SerializeField] private ThemeRegistry _themeRegistry;
         [SerializeField] private GameObject _lootMarkerPrefab;
         [SerializeField] private GameObject _dangerZoneMarkerPrefab;
+        // Optional. One marker instance per occupied tile of a visible
+        // (non-hidden) BattlefieldObject — a totem, wall, or cloud.
+        // Nothing is spawned until you assign this; see
+        // RefreshBattlefieldViews. Swap for a proper BattlefieldObjectView
+        // component later if you want per-object sprites/tinting.
+        [SerializeField] private GameObject _battlefieldObjectMarkerPrefab;
         [SerializeField] private LootWindowView _lootWindow;
         [SerializeField] private TurnTrackerView _turnTracker;
         [SerializeField] private GameObject _lootToggleButton;
@@ -81,6 +85,11 @@ namespace DungeonTower.UI
         [SerializeField] private int _mapWidth = 24;
         [SerializeField] private int _mapHeight = 16;
 
+        // How far a player unit can currently see, for fog of war.
+        // Reuses the same DetectionRadius concept enemies already have —
+        // see FogOfWar's doc comment.
+        [SerializeField] private int _playerVisionRadius = 8;
+
         // Hook for future floor progression — always 1 until a
         // "descend to the next floor" flow exists to increment it.
         // Both the theme lookup and the room/corridor size formula
@@ -93,8 +102,15 @@ namespace DungeonTower.UI
 
         private readonly System.Random _rng = new System.Random();
         private DungeonMap _map;
+        private BattlefieldObjectRegistry _battlefieldObjects;
+        private IWalkableMap _movementMap;
+        private IWalkableMap _sightMap;
+        private int _lastTickedRound = -1;
+        private readonly Dictionary<BattlefieldObject, List<GameObject>> _battlefieldViews = new Dictionary<BattlefieldObject, List<GameObject>>();
+        private readonly FogOfWar _fog = new FogOfWar();
         private Battle _battle;
         private readonly Dictionary<CombatUnit, UnitView> _unitViews = new Dictionary<CombatUnit, UnitView>();
+        private readonly Dictionary<CombatUnit, HealthBarView> _healthBars = new Dictionary<CombatUnit, HealthBarView>();
         private HashSet<GridPosition> _reachableTiles = new HashSet<GridPosition>();
         private ActionMode _mode = ActionMode.Move;
         private int _selectedAbilityIndex;
@@ -190,6 +206,9 @@ namespace DungeonTower.UI
         {
             var dungeon = MapGenerator.GenerateProcedural(_mapWidth, _mapHeight);
             _map = dungeon.Map;
+            _battlefieldObjects = new BattlefieldObjectRegistry();
+            _movementMap = new MovementMapView(_map, _battlefieldObjects);
+            _sightMap = new SightMapView(_map, _battlefieldObjects);
             Debug.Log($"Generated {dungeon.Rooms.Count} room(s)");
             _gridView.BuildFrom(_map);
 
@@ -207,6 +226,7 @@ namespace DungeonTower.UI
 
             _battle = new Battle(units);
             _battle.Start();
+            RefreshFogOfWar();
             BeginTurn();
         }
 
@@ -262,13 +282,13 @@ namespace DungeonTower.UI
             var playerSpawns = SpawnZones.PlayerSpawns(dungeon, 2);
 
             var warrior = new CombatUnit("Warrior", Faction.Player,
-                new UnitStats(ClassLibrary.Get(ClassId.Warrior)), playerSpawns[0]);
+                new UnitStats(ClassLibrary.Get(ClassId.Warrior)), playerSpawns[0], _playerVisionRadius);
             warrior.TryEquip(_warriorWeapon);
             warrior.Stats.TryEquipArmor(_warriorArmor);
             LoadBeltFromLists(warrior.Belt, _warriorStartingPotions, _warriorStartingScrolls);
 
             var adept = new CombatUnit("Adept", Faction.Player,
-                new UnitStats(ClassLibrary.Get(ClassId.Adept)), playerSpawns[1]);
+                new UnitStats(ClassLibrary.Get(ClassId.Adept)), playerSpawns[1], _playerVisionRadius);
             adept.TryEquip(_adeptWeapon);
             adept.Stats.TryEquipArmor(_adeptArmor);
             LoadBeltFromLists(adept.Belt, _adeptStartingPotions, _adeptStartingScrolls);
@@ -364,8 +384,10 @@ namespace DungeonTower.UI
             if (enemySO.Role == EnemyRole.Boss) _bossesSpawnedThisFloor++;
 
             var unit = new CombatUnit(enemySO.DisplayName, Faction.Enemy,
-                new UnitStats(ClassLibrary.Get(enemySO.ClassId)), position,
-                enemySO.DetectionRadius, enemySO.AlertRadius);
+    new UnitStats(ClassLibrary.Get(enemySO.ClassId)), position,
+    enemySO.DetectionRadius, enemySO.AlertRadius,
+    enemySO.TargetingStrategy, enemySO.TargetingRange,
+    enemySO.SupportTargetingStrategy, enemySO.SupportHealThreshold);
             unit.TryEquip(enemySO.Weapon);
             unit.Stats.TryEquipArmor(enemySO.Armor);
             return unit;
@@ -429,6 +451,7 @@ namespace DungeonTower.UI
             _unitViews[unit] = view;
             var bar = Instantiate(_healthBarPrefab, _healthBarContainer);
             bar.Bind(unit);
+            _healthBars[unit] = bar;
         }
 
         private void BeginTurn()
@@ -447,6 +470,11 @@ namespace DungeonTower.UI
 
             var unit = _battle.CurrentUnit;
             Debug.Log($"Round {_battle.RoundNumber} — {unit.DisplayName}'s turn ({unit.Faction})");
+            if (_battle.RoundNumber != _lastTickedRound)
+            {
+                _lastTickedRound = _battle.RoundNumber;
+                TickBattlefieldObjects();
+            }
             unit.TickCooldowns();
             var startTick = unit.Status.OnTurnStart();
             foreach (var line in startTick.Log) Debug.Log(line);
@@ -509,7 +537,7 @@ namespace DungeonTower.UI
                     _selectedAbilityIndex = 0;
                     _reachableTiles = unit.Status.CanMove
                         ? MovementRangeCalculator.GetReachableTiles(
-                         unit.Position, unit.Stats.MoveRange, _map, OccupiedTilesExcluding(unit))
+                         unit.Position, unit.Stats.MoveRange, _movementMap, OccupiedTilesExcluding(unit))
                         : new HashSet<GridPosition> { unit.Position };
                     _gridView.SetHighlights(_reachableTiles, Enumerable.Empty<GridPosition>());
                     _abilityBar.SetSelected(-1);
@@ -561,7 +589,32 @@ namespace DungeonTower.UI
             var moveTick = unit.Status.OnMoved();
             foreach (var line in moveTick.Log) Debug.Log(line);
             _unitViews[unit].Refresh();
-            if (moveTick.OwnerDied) HandleDeath(unit);
+            if (moveTick.OwnerDied) { HandleDeath(unit); return; }
+
+            foreach (var ended in _battlefieldObjects.RemoveOwnedByMovement(unit))
+                Debug.Log($"{unit.DisplayName}'s {ended.Name} fades as they move.");
+
+            ResolveBattlefieldEntry(unit, destination);
+        }
+
+        // Fires any Trap/hazard sitting on the tile just entered. Called
+        // from every path that changes a unit's position: MoveUnit, and
+        // the push/pull/swap resolution below.
+        private void ResolveBattlefieldEntry(CombatUnit unit, GridPosition position)
+        {
+            foreach (var obj in _battlefieldObjects.TriggerOnEntry(unit, position))
+            {
+                Debug.Log($"{unit.DisplayName} triggers {obj.Name}!");
+                foreach (var app in obj.Statuses)
+                {
+                    var result = unit.Status.Apply(app, obj.OwnerUnit, _rng);
+                    if (result.Succeeded)
+                        Debug.Log($"{unit.DisplayName} is affected by {obj.Name} ({app.Id}).");
+                }
+                _unitViews[unit].Refresh();
+                if (!unit.IsAlive) { HandleDeath(unit); break; }
+            }
+            RefreshFogOfWar();
         }
 
         private void OnAbilitySelected(int index)
@@ -788,13 +841,28 @@ namespace DungeonTower.UI
         {
             if (ability == null) return new List<GridPosition>();
 
-            if (ability.AreaShape == AttackShape.Single)
+            if (ability.EffectKind == EffectKind.Summon)
+                return GetSummonTargetTiles(unit, ability);
+
+            if (ability.AreaShape == AttackShape.Single || ability.AreaShape == AttackShape.Chain)
                 return GetSingleTargetTiles(unit, ability);
 
             return AreaOfEffect.GetAffectedTiles(unit.Position, unit.Position, AttackShape.Blast, ability.Range)
                 .Where(InBounds)
                 .ToList();
         }
+
+        // A Summon lands on an empty, walkable tile within Range
+        // (LOS-gated, same as everything else) — the ANCHOR tile only;
+        // the footprint then extends from there via the normal
+        // AreaOfEffect geometry (Single for a totem/trap, Line for a
+        // wall, Blast/Ring/Cross for a cloud), exactly like a Damage
+        // ability's footprint already works.
+        private List<GridPosition> GetSummonTargetTiles(CombatUnit unit, IAbility ability)
+            => AreaOfEffect.GetAffectedTiles(unit.Position, unit.Position, AttackShape.Blast, ability.Range)
+                .Where(pos => InBounds(pos) && _movementMap.IsWalkable(pos) && FindLivingUnitAt(pos) == null
+                    && LineOfSight.HasClearPath(unit.Position, pos, _sightMap))
+                .ToList();
 
         // Damage targets enemies; Heal/Buff target allies (the caster's
         // own tile included, so a single-target heal can be cast on
@@ -806,9 +874,19 @@ namespace DungeonTower.UI
                 .Where(u => u.IsAlive
                     && (targetAllies ? u.Faction == unit.Faction : u.Faction != unit.Faction)
                     && u.Position.ManhattanDistance(unit.Position) <= ability.Range
-                    && LineOfSight.HasClearPath(unit.Position, u.Position, _map))
+                    && LineOfSight.HasClearPath(unit.Position, u.Position, _sightMap))
                 .Select(u => u.Position)
                 .ToList();
+
+            // A destructible BattlefieldObject (a totem) is also a legal
+            // Damage-ability target — checked here so it shows up as a
+            // clickable/highlighted tile alongside living units.
+            if (ability.EffectKind == EffectKind.Damage)
+                tiles.AddRange(_battlefieldObjects.Active
+                    .Where(o => o.MaxHp.HasValue
+                        && o.Tiles.Any(t => unit.Position.ManhattanDistance(t) <= ability.Range
+                            && LineOfSight.HasClearPath(unit.Position, t, _sightMap)))
+                    .SelectMany(o => o.Tiles));
 
             // Taunted: if the taunter is a legal target right now, they're the ONLY one.
             // (Out of range/LOS -> no restriction. Area abilities are never restricted.)
@@ -998,10 +1076,28 @@ namespace DungeonTower.UI
             EndTurn();
         }
 
+        // How many rounds a pack keeps chasing a stale sighting before
+        // giving up on it — see PickKnownTarget.
+        private const int MemoryMaxAgeRounds = 5;
+
+        // How much OLDER than MemoryMaxAgeRounds a sighting is still
+        // allowed to be before it's too cold even to search near — see
+        // PickSearchAnchor. Must be greater than MemoryMaxAgeRounds:
+        // this is the extra grace period after active chasing ends,
+        // not a replacement for it.
+        private const int SearchGiveUpRounds = 15;
+
+        // How far from a search anchor an enemy is willing to wander
+        // while sniffing around for its lost target — see SearchAI.
+        private const int SearchRadius = 5;
+
         private void RunEnemyTurn(CombatUnit enemy)
         {
-            var target = TauntRules.GetForcedTarget(enemy) ?? FindNearestPlayer(enemy);
-            if (target == null)
+            // Waking up is still keyed off the nearest player regardless of this
+            // enemy's preferred-target strategy — noticing someone and deciding
+            // who to act on are different questions.
+            var nearest = FindNearestPlayer(enemy);
+            if (nearest == null)
             {
                 EndTurn();
                 return;
@@ -1009,16 +1105,17 @@ namespace DungeonTower.UI
 
             if (!enemy.IsAlerted)
             {
-                if (enemy.CanSense(target.Position, _map))
+                if (enemy.CanSense(nearest.Position, _sightMap))
                 {
                     AlertUnit(enemy);
-                    Debug.Log($"{enemy.DisplayName} spots {target.DisplayName}!");
+                    Debug.Log($"{enemy.DisplayName} spots {nearest.DisplayName}!");
+                    RecordSighting(enemy, nearest);
                 }
                 else
                 {
                     if (enemy.Status.CanMove)
                     {
-                        var step = RoamAI.ChooseStep(enemy, _map, OccupiedTilesExcluding(enemy), _rng);
+                        var step = RoamAI.ChooseStep(enemy, _movementMap, OccupiedTilesExcluding(enemy), _rng);
                         if (step.HasValue) MoveUnit(enemy, step.Value);
                     }
                     EndTurn();
@@ -1026,47 +1123,255 @@ namespace DungeonTower.UI
                 }
             }
 
-            var ability = GetEnemyActiveAbility(enemy);
-            int range = ability?.Range ?? 1;
+            // Refresh memory for every hostile this enemy can currently
+            // see, independent of who it ends up acting on this turn —
+            // and share each sighting with the rest of its alerted pack
+            // (see RecordSighting). This is what lets an ally who never
+            // personally spotted anyone still know where to converge.
+            foreach (var hostile in _unitViews.Keys.Where(u => u.IsAlive && u.Faction != enemy.Faction))
+                if (enemy.CanSense(hostile.Position, _sightMap))
+                    RecordSighting(enemy, hostile);
 
-            if (enemy.Position.ManhattanDistance(target.Position) <= range
-                && LineOfSight.HasClearPath(enemy.Position, target.Position, _map))
+            // 1. Support: the first weapon ability (in slot order) that targets
+            // allies AND has a genuinely needy target within TargetingRange wins
+            // — used even if that means moving instead of attacking this turn.
+            // Allies aren't subject to fog-of-memory — an enemy always
+            // knows exactly how hurt its own side is.
+            if (TryPickSupportAction(enemy, out var supportAbility, out var supportTarget))
             {
-                if (ability != null) ExecuteAbilityAt(enemy, ability, target.Position);
+                ActOnTarget(enemy, supportTarget.Position, supportAbility);
+                return;
+            }
+
+            // 2. Offense. Taunt always uses the live position — being
+            // taunted means the target is right in the attacker's face,
+            // not something to look up in memory. Otherwise, chase
+            // whatever this enemy's pack has actually SEEN: live if
+            // currently visible, else the freshest remembered sighting
+            // within MemoryMaxAgeRounds. Nothing chase-worthy falls
+            // through to searching near the last thing anyone in the
+            // pack saw (PickSearchAnchor, a longer/looser window than
+            // chasing), and finally to plain idle roaming once even
+            // that's gone cold — the trail is genuinely lost.
+            var forced = TauntRules.GetForcedTarget(enemy);
+            if (forced != null)
+            {
+                ActOnTarget(enemy, forced.Position, GetEnemyOffenseAbility(enemy));
+                return;
+            }
+
+            var (target, believedPosition) = PickKnownTarget(enemy);
+            if (target != null)
+            {
+                ActOnTarget(enemy, believedPosition, GetEnemyOffenseAbility(enemy));
+                return;
+            }
+
+            var searchAnchor = PickSearchAnchor(enemy);
+            if (searchAnchor != null)
+            {
+                Debug.Log($"{enemy.DisplayName} searches near where it last saw something.");
+                if (enemy.Status.CanMove)
+                {
+                    var step = SearchAI.ChooseStep(
+                        enemy, searchAnchor.Value, SearchRadius, _movementMap, OccupiedTilesExcluding(enemy), _rng);
+                    if (step.HasValue) MoveUnit(enemy, step.Value);
+                }
                 EndTurn();
                 return;
             }
 
-            var reachable = MovementRangeCalculator.GetReachableTiles(
-                enemy.Position, enemy.Stats.MoveRange, _map, OccupiedTilesExcluding(enemy));
-            if (reachable.Count > 0)
+            // Fully cold — no sighting even within the search window.
+            // Settle back into ordinary idle roaming, the same behavior
+            // this unit had before it was ever alerted. It stays
+            // IsAlerted (no de-aggro, by design — see CombatUnit), so a
+            // fresh sighting instantly snaps it back into chasing; it's
+            // only the MOVEMENT that reverts to idle in the meantime.
+            Debug.Log($"{enemy.DisplayName} gives up the search.");
+            if (enemy.Status.CanMove)
             {
-                var step = ChooseEnemyStep(enemy, target, range, reachable);
-                if (step.HasValue)
+                var roamStep = RoamAI.ChooseStep(enemy, _movementMap, OccupiedTilesExcluding(enemy), _rng);
+                if (roamStep.HasValue) MoveUnit(enemy, roamStep.Value);
+            }
+            EndTurn();
+        }
+
+        // The nearest remembered sighting of ANY hostile that's still
+        // within SearchGiveUpRounds — a longer, looser window than
+        // PickKnownTarget's chase threshold. Where an enemy wanders
+        // while it no longer has anything worth beelining toward but
+        // hasn't fully given up either. Null once every sighting a pack
+        // holds has aged past even this.
+        private GridPosition? PickSearchAnchor(CombatUnit enemy)
+        {
+            var anchors = _unitViews.Keys
+                .Where(u => u.Faction != enemy.Faction)
+                .Select(u => enemy.Memory.Get(u, _battle.RoundNumber, SearchGiveUpRounds))
+                .Where(p => p.HasValue)
+                .Select(p => p.Value)
+                .ToList();
+
+            return anchors.Count > 0
+                ? anchors.OrderBy(p => enemy.Position.ManhattanDistance(p)).First()
+                : (GridPosition?)null;
+        }
+
+        // Records that `observer` currently sees `target` at its live
+        // position, and shares that sighting with every other alerted
+        // member of observer's faction — a spotted intruder's position
+        // travels through the pack the same way AlertUnit's wake-up
+        // already does. Only call this when observer genuinely has
+        // current LOS to target (callers already check via CanSense).
+        private void RecordSighting(CombatUnit observer, CombatUnit target)
+        {
+            int round = _battle.RoundNumber;
+            foreach (var ally in _unitViews.Keys.Where(u => u.Faction == observer.Faction && u.IsAlive && u.IsAlerted))
+                ally.Memory.Record(target, target.Position, round);
+        }
+
+        // What this enemy's pack actually knows about who to chase.
+        // Prefers a currently-visible hostile (still respecting the
+        // configured TargetingStrategy when the strategy's own pick is
+        // among what's visible); otherwise falls back to whichever
+        // hostile has the nearest FRESH remembered sighting. Returns
+        // (null, default) when nothing is known at all — a real "lost
+        // the trail" state, not just "nobody's close enough yet."
+        private (CombatUnit Target, GridPosition Position) PickKnownTarget(CombatUnit enemy)
+        {
+            var visibleHostiles = _unitViews.Keys
+                .Where(u => u.IsAlive && u.Faction != enemy.Faction && enemy.CanSense(u.Position, _sightMap))
+                .ToList();
+
+            if (visibleHostiles.Count > 0)
+            {
+                var strategyPick = PickOffenseTarget(enemy);
+                var chosen = strategyPick != null && visibleHostiles.Contains(strategyPick)
+                    ? strategyPick
+                    : visibleHostiles.OrderBy(u => u.Position.ManhattanDistance(enemy.Position)).First();
+                return (chosen, chosen.Position);
+            }
+
+            var remembered = _unitViews.Keys
+                .Where(u => u.IsAlive && u.Faction != enemy.Faction)
+                .Select(u => (unit: u, pos: enemy.Memory.Get(u, _battle.RoundNumber, MemoryMaxAgeRounds)))
+                .Where(p => p.pos.HasValue)
+                .ToList();
+            if (remembered.Count == 0) return (null, default);
+
+            var best = remembered.OrderBy(p => enemy.Position.ManhattanDistance(p.pos.Value)).First();
+            return (best.unit, best.pos.Value);
+        }
+
+        // Shared tail: act now if believedPosition is already in range
+        // and visible, otherwise take one step toward a tile that would
+        // put it in range. A null ability still lets a stuck enemy close
+        // distance (range defaults to 1 — melee) rather than doing
+        // nothing. believedPosition may be stale (a remembered sighting
+        // rather than a live one) — if whoever's actually there (if
+        // anyone) isn't the target, ExecuteAbilityAt simply finds no
+        // living unit at that tile and the attack fizzles; that's
+        // correct, not a bug.
+        private void ActOnTarget(CombatUnit enemy, GridPosition believedPosition, IAbility ability)
+        {
+            int range = ability?.Range ?? 1;
+
+            if (enemy.Position.ManhattanDistance(believedPosition) <= range
+                && LineOfSight.HasClearPath(enemy.Position, believedPosition, _sightMap))
+            {
+                if (ability != null) ExecuteAbilityAt(enemy, ability, believedPosition);
+                EndTurn();
+                return;
+            }
+
+            if (enemy.Status.CanMove)
+            {
+                var reachable = MovementRangeCalculator.GetReachableTiles(
+                    enemy.Position, enemy.Stats.MoveRange, _movementMap, OccupiedTilesExcluding(enemy));
+                if (reachable.Count > 0)
                 {
-                    MoveUnit(enemy, step.Value);
+                    var step = ChooseEnemyStep(enemy, believedPosition, range, reachable);
+                    if (step.HasValue) MoveUnit(enemy, step.Value);
                 }
             }
 
             EndTurn();
         }
 
-        // Prefers a reachable tile that already has range AND line of
-        // sight to the target — "find a firing position" — breaking ties
-        // by real path distance. Falls back to the reachable tile with
-        // the smallest real path distance if no such tile exists this
-        // turn. Either way, "real path distance" (via PathDistanceField)
-        // is what actually fixes walking into dead-end corners — a
-        // straight-line-close tile behind a wall now correctly ranks
-        // farther than one along an actual route around it.
-        private GridPosition? ChooseEnemyStep(
-            CombatUnit enemy, CombatUnit target, int range, HashSet<GridPosition> reachable)
+        // The first weapon ability (in order) that's usable, targets allies,
+        // and has at least one ally within TargetingRange who actually needs
+        // it right now. False (both out params null) is the normal case for
+        // most turns — most of the time nobody needs anything.
+        private bool TryPickSupportAction(CombatUnit enemy, out IAbility ability, out CombatUnit target)
         {
-            var distanceField = PathDistanceField.BuildFrom(target.Position, _map);
+            ability = null;
+            target = null;
+            var weapon = enemy.EquippedWeapon;
+            if (weapon == null) return false;
+
+            var allies = AlliesWithinRange(enemy, enemy.TargetingRange);
+            if (allies.Count == 0) return false;
+
+            foreach (var candidate in weapon.Abilities)
+            {
+                if (enemy.IsOnCooldown(candidate)) continue;
+                if (SilenceRules.IsBlocked(enemy, candidate, AbilitySource.Weapon)) continue;
+                if (!AbilityTargeting.TargetsAllies(candidate)) continue;
+
+                var needy = allies.Where(a => SupportNeed.Needs(a, candidate, enemy.SupportHealThreshold)).ToList();
+                if (needy.Count == 0) continue;
+
+                var picked = EnemyTargeting.PickSupportTarget(enemy, needy, enemy.SupportTargetingStrategy);
+                if (picked != null)
+                {
+                    ability = candidate;
+                    target = picked;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // The offense counterpart of the ally scan above: living enemies within
+        // this unit's TargetingRange, picked by its own TargetingStrategy. Null
+        // (not empty) when nobody qualifies. NOTE: unlike PickKnownTarget, this
+        // does not itself check current visibility — PickKnownTarget guards
+        // that by only accepting this pick when it's also in visibleHostiles.
+        private CombatUnit PickOffenseTarget(CombatUnit enemy)
+        {
+            var hostiles = _unitViews.Keys
+                .Where(u => u.IsAlive && u.Faction != enemy.Faction
+                    && u.Position.ManhattanDistance(enemy.Position) <= enemy.TargetingRange)
+                .ToList();
+
+            return hostiles.Count > 0
+                ? EnemyTargeting.PickHostileTarget(enemy, hostiles, enemy.TargetingStrategy)
+                : null;
+        }
+
+        private List<CombatUnit> AlliesWithinRange(CombatUnit enemy, int range)
+    => _unitViews.Keys
+        .Where(u => u.IsAlive && u != enemy && u.Faction == enemy.Faction
+            && u.Position.ManhattanDistance(enemy.Position) <= range)
+        .ToList();
+
+        // Prefers a reachable tile that already has range AND line of
+        // sight to believedPosition — "find a firing position" — breaking
+        // ties by real path distance. Falls back to the reachable tile
+        // with the smallest real path distance if no such tile exists
+        // this turn. Either way, "real path distance" (via
+        // PathDistanceField) is what actually fixes walking into
+        // dead-end corners — a straight-line-close tile behind a wall
+        // now correctly ranks farther than one along an actual route
+        // around it.
+        private GridPosition? ChooseEnemyStep(
+            CombatUnit enemy, GridPosition believedPosition, int range, HashSet<GridPosition> reachable)
+        {
+            var distanceField = PathDistanceField.BuildFrom(believedPosition, _movementMap);
 
             var firingPosition = reachable
-                .Where(pos => pos.ManhattanDistance(target.Position) <= range
-                    && LineOfSight.HasClearPath(pos, target.Position, _map))
+                .Where(pos => pos.ManhattanDistance(believedPosition) <= range
+                    && LineOfSight.HasClearPath(pos, believedPosition, _sightMap))
                 .OrderBy(pos => PathDistanceOrMax(distanceField, pos))
                 .Select(pos => (GridPosition?)pos)
                 .FirstOrDefault();
@@ -1105,16 +1410,35 @@ namespace DungeonTower.UI
         {
             attacker.TriggerCooldown(ability);
 
+            if (ability.EffectKind == EffectKind.Summon)
+            {
+                SpawnBattlefieldObject(attacker, ability, impactTile);
+                return;
+            }
+
             if (ability.AreaShape == AttackShape.Single)
             {
                 var target = FindLivingUnitAt(impactTile);
-                if (target == null) return;
-                ApplyAbilityEffect(attacker, target, ability);
+                if (target != null) { ApplyAbilityEffect(attacker, target, ability); return; }
+
+                if (ability.EffectKind == EffectKind.Damage)
+                {
+                    var obj = _battlefieldObjects.At(impactTile).FirstOrDefault(o => o.MaxHp.HasValue);
+                    if (obj != null) DamageBattlefieldObject(attacker, obj, ability);
+                }
+                return;
+            }
+
+            if (ability.AreaShape == AttackShape.Chain)
+            {
+                ExecuteChain(attacker, ability, impactTile);
                 return;
             }
 
             var affectedTiles = new HashSet<GridPosition>(
                 AreaOfEffect.GetAffectedTiles(attacker.Position, impactTile, ability.AreaShape, ability.AreaRadius));
+
+
 
             // Damage AoE excludes the caster (allies can still be caught
             // in it, same as most tactics games); Heal/Buff AoE includes
@@ -1167,6 +1491,65 @@ namespace DungeonTower.UI
             }
 
             ApplyAbilityStatuses(attacker, target, ability);   // <-- new, after the switch's closing brace
+            ApplyPositionalEffects(attacker, target, ability);
+        }
+
+        private void ApplyPositionalEffects(CombatUnit attacker, CombatUnit target, IAbility ability)
+        {
+            if (target == attacker || !target.IsAlive) return;
+
+            if (ability.SwapWithCaster)
+            {
+                var casterPos = attacker.Position;
+                attacker.Position = target.Position;
+                target.Position = casterPos;
+                _unitViews[attacker].Refresh();
+                _unitViews[target].Refresh();
+                Debug.Log($"{attacker.DisplayName} swaps places with {target.DisplayName}.");
+                ResolveBattlefieldEntry(attacker, attacker.Position);
+                ResolveBattlefieldEntry(target, target.Position);
+                return;
+            }
+
+            if (ability.PushDistance != 0)
+                ApplyPush(attacker, target, ability.PushDistance);
+        }
+
+        // Moves `target` up to Abs(distance) tiles along the
+        // attacker->target line — away from the attacker if positive,
+        // toward it if negative — stopping early at the first wall or
+        // occupied tile. No bonus damage for a "wall splat".
+        private void ApplyPush(CombatUnit attacker, CombatUnit target, int distance)
+        {
+            var (dx, dy) = CardinalDirectionFrom(attacker.Position, target.Position);
+            bool pulling = distance < 0;
+            var current = target.Position;
+
+            for (int i = 0; i < Math.Abs(distance); i++)
+            {
+                var next = pulling
+                    ? new GridPosition(current.X - dx, current.Y - dy)
+                    : new GridPosition(current.X + dx, current.Y + dy);
+                if (!_movementMap.IsWalkable(next) || FindLivingUnitAt(next) != null) break;
+                current = next;
+            }
+
+            if (current.Equals(target.Position)) return;
+
+            target.Position = current;
+            _unitViews[target].Refresh();
+            Debug.Log($"{target.DisplayName} is {(pulling ? "pulled" : "pushed")} to ({current.X},{current.Y}).");
+            ResolveBattlefieldEntry(target, current);
+        }
+
+        // Same cardinal-snap rule AreaOfEffect uses for Line/Cone,
+        // duplicated here (it's private there) rather than exposed.
+        private static (int dx, int dy) CardinalDirectionFrom(GridPosition from, GridPosition to)
+        {
+            int dx = to.X - from.X, dy = to.Y - from.Y;
+            return Math.Abs(dx) >= Math.Abs(dy)
+                ? (Math.Sign(dx) == 0 ? 1 : Math.Sign(dx), 0)
+                : (0, Math.Sign(dy));
         }
 
         // Applies the ability's Statuses to one target: the whole payload for
@@ -1203,6 +1586,211 @@ namespace DungeonTower.UI
             _unitViews[target].Refresh();
         }
 
+        // Hits whoever's at impactTile, then repeatedly jumps to the nearest
+        // not-yet-hit valid target within `ability.Range` of the PREVIOUS
+        // target, up to `ability.AreaRadius` additional jumps (AreaRadius 2 =
+        // 3 targets total: the initial hit plus 2 jumps). "Valid" follows the
+        // ability's own polarity — enemies for a hostile ability, allies for a
+        // beneficial one. Fizzles early (fewer targets than the max) once
+        // nothing eligible remains in range — that's normal, not an error.
+        //
+        // DESIGN NOTE: this reuses Range/AreaRadius rather than adding new
+        // IAbility fields — Range becomes "max distance per jump" (same
+        // meaning as always: how far this ability can reach) and AreaRadius
+        // becomes "how many further jumps," instead of a physical radius. Say
+        // if you'd rather Chain had its own dedicated field(s) instead.
+        private void ExecuteChain(CombatUnit attacker, IAbility ability, GridPosition impactTile)
+        {
+            var first = FindLivingUnitAt(impactTile);
+            if (first == null) return;
+
+            bool targetsAllies = AbilityTargeting.TargetsAllies(ability);
+            var hit = new HashSet<CombatUnit> { first };
+            ApplyAbilityEffect(attacker, first, ability);
+
+            var current = first;
+            for (int jump = 0; jump < ability.AreaRadius; jump++)
+            {
+                var next = _unitViews.Keys
+                    .Where(u => u.IsAlive && !hit.Contains(u)
+                        && (targetsAllies ? u.Faction == attacker.Faction : u.Faction != attacker.Faction)
+                        && u.Position.ManhattanDistance(current.Position) <= ability.Range
+                        && LineOfSight.HasClearPath(current.Position, u.Position, _sightMap))
+                    .OrderBy(u => u.Position.ManhattanDistance(current.Position))
+                    .FirstOrDefault();
+
+                if (next == null) break;
+                hit.Add(next);
+                ApplyAbilityEffect(attacker, next, ability);
+                current = next;
+            }
+        }
+
+        private void SpawnBattlefieldObject(CombatUnit caster, IAbility ability, GridPosition anchorTile)
+        {
+            var tiles = AreaOfEffect.GetAffectedTiles(caster.Position, anchorTile, ability.AreaShape, ability.AreaRadius);
+            var obj = new BattlefieldObject
+            {
+                Name = ability.Name,
+                OwnerFaction = caster.Faction,
+                OwnerUnit = ability.EndsIfOwnerMoves ? caster : null,
+                Tiles = tiles,
+                RemainingDuration = ability.SummonDuration > 0 ? ability.SummonDuration : int.MaxValue,
+                MaxHp = ability.SummonMaxHp > 0 ? ability.SummonMaxHp : (int?)null,
+                CurrentHp = ability.SummonMaxHp,
+                BlocksMovement = ability.SummonBlocksMovement,
+                BlocksLineOfSight = ability.SummonBlocksLineOfSight,
+                IsHidden = ability.SummonIsHidden,
+                TriggerMode = ability.SummonTriggerMode,
+                ConsumedAfterTrigger = ability.SummonConsumedAfterTrigger,
+                IgnoreOwnerFaction = ability.SummonIgnoreOwnerFaction,
+                AuraRadius = ability.AuraRadius,
+                AffectsAllies = ability.SummonAffectsAllies,
+                Statuses = ability.Statuses
+            };
+            _battlefieldObjects.Add(obj);
+            Debug.Log($"{caster.DisplayName} places {ability.Name}.");
+            RefreshFogOfWar();
+        }
+
+        // SIMPLIFICATION, flagged deliberately: this does NOT go through
+        // AttackResolver — an inanimate object has no defense stat or
+        // crit chance to resolve against. Damage is just Attack x
+        // Multiplier, rounded, minimum 1.
+        private void DamageBattlefieldObject(CombatUnit attacker, BattlefieldObject obj, IAbility ability)
+        {
+            float attackStat = ability.Kind == AttackKind.Physical
+                ? attacker.Stats.PhysicalAttack : attacker.Stats.MagicAttack;
+            int damage = Math.Max(1, (int)Math.Round(attackStat * ability.DamageMultiplier));
+
+            obj.CurrentHp -= damage;
+            Debug.Log($"{attacker.DisplayName} hits {obj.Name} for {damage}.");
+
+            if (obj.CurrentHp <= 0)
+            {
+                _battlefieldObjects.Remove(obj);
+                Debug.Log($"{obj.Name} is destroyed!");
+            }
+            RefreshFogOfWar();
+        }
+
+        private void TickBattlefieldObjects()
+        {
+            foreach (var expired in _battlefieldObjects.TickDuration())
+                Debug.Log($"{expired.Name} fades away.");
+
+            foreach (var obj in _battlefieldObjects.Active.ToList())
+            {
+                if (obj.TriggerMode != SummonTriggerMode.OnRoundTick) continue;
+
+                foreach (var unit in _battlefieldObjects.UnitsInAuraRange(obj, _unitViews.Keys))
+                {
+                    foreach (var app in obj.Statuses)
+                    {
+                        var result = unit.Status.Apply(app, obj.OwnerUnit, _rng);
+                        if (result.Succeeded)
+                            Debug.Log($"{unit.DisplayName} is affected by {obj.Name} ({app.Id}).");
+                    }
+                    _unitViews[unit].Refresh();
+                }
+            }
+
+            RefreshFogOfWar();
+        }
+
+        // Optional visual layer: spawns/destroys one plain marker per
+        // occupied tile of every currently-visible (non-hidden)
+        // BattlefieldObject. No-ops entirely until you assign
+        // _battlefieldObjectMarkerPrefab in the Inspector. Swap the
+        // Instantiate call for a real BattlefieldObjectView component
+        // when you want per-object sprites/tinting/duration display.
+        private void RefreshBattlefieldViews()
+        {
+            var stale = _battlefieldViews.Keys.Where(o => !_battlefieldObjects.Active.Contains(o)).ToList();
+            foreach (var obj in stale)
+            {
+                foreach (var view in _battlefieldViews[obj]) Destroy(view);
+                _battlefieldViews.Remove(obj);
+            }
+
+            if (_battlefieldObjectMarkerPrefab == null) return;
+
+            foreach (var obj in _battlefieldObjects.Visible)
+            {
+                if (_battlefieldViews.ContainsKey(obj)) continue;
+                var views = new List<GameObject>();
+                foreach (var tile in obj.Tiles)
+                {
+                    var marker = Instantiate(_battlefieldObjectMarkerPrefab, transform);
+                    marker.transform.position = GridToWorld.ToWorldPosition(tile);
+                    views.Add(marker);
+                }
+                _battlefieldViews[obj] = views;
+            }
+        }
+
+        // The single place fog gets recomputed and every dependent view
+        // gets updated: tile shading, which enemies/health bars are
+        // shown, danger-zone markers, loot markers, and battlefield
+        // object markers. Call after anything that could change what's
+        // visible — a unit moves or dies, or a Wall/Cloud appears,
+        // vanishes, or is destroyed. Cheap enough to call liberally;
+        // see FogOfWar.Recompute.
+        private void RefreshFogOfWar()
+        {
+            var players = _unitViews.Keys.Where(u => u.Faction == Faction.Player);
+            _fog.Recompute(players, _sightMap, _map);
+
+            _gridView.ApplyFog(_fog);
+
+            foreach (var unit in _unitViews.Keys)
+            {
+                // The player's own party is always shown; only the
+                // opposing side is gated by current vision — you always
+                // know where your own people are.
+                bool visible = unit.Faction == Faction.Player || _fog.IsCurrentlyVisible(unit.Position);
+                _unitViews[unit].SetFogVisible(visible);
+                if (_healthBars.TryGetValue(unit, out var bar)) bar.SetFogVisible(visible);
+            }
+
+            RefreshDangerZoneMarkers();
+            RefreshLootMarkerVisibility();
+            RefreshBattlefieldViews();
+            RefreshBattlefieldMarkerVisibility();
+        }
+
+        // A loot pile/chest only shows while its tile is currently lit —
+        // same rule as an enemy unit. It reappears (not re-triggers
+        // anything) the moment it's back in view; nothing is destroyed
+        // here, only shown/hidden.
+        private void RefreshLootMarkerVisibility()
+        {
+            foreach (var pair in _lootMarkers)
+                pair.Value.SetActive(_fog.IsCurrentlyVisible(pair.Key));
+
+            foreach (var chest in _chests)
+                if (chest != null)
+                {
+                    var renderer = chest.GetComponent<SpriteRenderer>();
+                    if (renderer != null) renderer.enabled = _fog.IsCurrentlyVisible(chest.Position);
+                }
+        }
+
+        // Same idea for totem/wall/cloud markers — each marker's tile is
+        // obj.Tiles[i] in the same order RefreshBattlefieldViews created
+        // them, so they're zipped by index rather than needing the tile
+        // stored on the marker itself.
+        private void RefreshBattlefieldMarkerVisibility()
+        {
+            foreach (var pair in _battlefieldViews)
+            {
+                var tiles = pair.Key.Tiles;
+                var views = pair.Value;
+                for (int i = 0; i < views.Count && i < tiles.Count; i++)
+                    views[i].SetActive(_fog.IsCurrentlyVisible(tiles[i]));
+            }
+        }
+
         private void ResolveAttack(CombatUnit attacker, CombatUnit defender, IAbility ability)
         {
             var result = AttackResolver.Resolve(attacker, defender, ability, _rng);
@@ -1228,6 +1816,9 @@ namespace DungeonTower.UI
         {
             Debug.Log($"{unit.DisplayName} has fallen.");
 
+            foreach (var ended in _battlefieldObjects.RemoveOwnedByMovement(unit))
+                Debug.Log($"{unit.DisplayName}'s {ended.Name} fades as they fall.");
+
             // A natural weapon/armor (claws, thick hide, etc.) never
             // shows up as loot — only real gear does.
             var droppedWeapon = unit.EquippedWeapon != null && unit.EquippedWeapon.DropsOnDeath
@@ -1240,6 +1831,8 @@ namespace DungeonTower.UI
                 _lootOnGround.Add(new LootDrop(unit.Position, droppedWeapon, droppedArmor));
                 SpawnLootMarker(unit.Position);
             }
+
+            RefreshFogOfWar();
         }
 
         // Every living, un-alerted enemy's detection radius, shown as a
@@ -1257,8 +1850,9 @@ namespace DungeonTower.UI
             foreach (var enemy in _unitViews.Keys)
             {
                 if (enemy.Faction != Faction.Enemy || !enemy.IsAlive || enemy.IsAlerted) continue;
+                if (!_fog.IsCurrentlyVisible(enemy.Position)) continue; // can't see it, can't see its danger zone
                 foreach (var tile in TilesWithinRadius(enemy.Position, enemy.DetectionRadius))
-                    if (_map.IsWalkable(tile) && LineOfSight.HasClearPath(enemy.Position, tile, _map))
+                    if (_map.IsWalkable(tile) && LineOfSight.HasClearPath(enemy.Position, tile, _sightMap))
                         dangerTiles.Add(tile);
             }
 
@@ -1472,18 +2066,20 @@ namespace DungeonTower.UI
             return weapon.Abilities[index];
         }
 
-        // Tries each of the weapon's abilities in order and uses the
-        // first one that isn't on cooldown; null if every one is (the
-        // enemy just moves this turn instead of attacking).
-        private IAbility GetEnemyActiveAbility(CombatUnit unit)
+        // Only weapon abilities that DON'T target allies are offense candidates
+        // — a Heal-kind ability sitting in slot 0 no longer blocks a Damage
+        // ability in slot 1 from ever being tried; support already had its own
+        // pass in TryPickSupportAction.
+        private IAbility GetEnemyOffenseAbility(CombatUnit enemy)
         {
-            var weapon = unit.EquippedWeapon;
+            var weapon = enemy.EquippedWeapon;
             if (weapon == null) return null;
 
-            foreach (var ability in weapon.Abilities)
-                if (!unit.IsOnCooldown(ability)
-                    && !SilenceRules.IsBlocked(unit, ability, AbilitySource.Weapon))
-                    return ability;
+            foreach (var candidate in weapon.Abilities)
+                if (!enemy.IsOnCooldown(candidate)
+                    && !SilenceRules.IsBlocked(enemy, candidate, AbilitySource.Weapon)
+                    && !AbilityTargeting.TargetsAllies(candidate))
+                    return candidate;
 
             return null;
         }

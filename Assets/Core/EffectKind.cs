@@ -20,6 +20,10 @@ namespace DungeonTower.Core
         Heal,
         Buff,
         Status,
-        Cleanse
+        Cleanse,
+        // Places a BattlefieldObject on the grid instead of affecting a
+        // unit directly — a totem, trap, wall, or obscuring cloud. See
+        // IAbility's Summon* fields and SummonTriggerMode.
+        Summon
     }
 }

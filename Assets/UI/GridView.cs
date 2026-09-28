@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using DungeonTower.Combat;
 using DungeonTower.Core;
 using DungeonTower.Generation;
 
@@ -34,6 +35,20 @@ namespace DungeonTower.UI
                     tile.Initialize(pos, map.GetTile(pos));
                     _tiles[pos] = tile;
                 }
+            }
+        }
+
+        // One TileView.SetFog call per tile, driven by the given
+        // FogOfWar's current state. Call after FogOfWar.Recompute — this
+        // only reads it, never recomputes anything itself.
+        public void ApplyFog(FogOfWar fog)
+        {
+            foreach (var pair in _tiles)
+            {
+                var state = fog.IsCurrentlyVisible(pair.Key) ? TileView.FogState.Visible
+                    : fog.IsExplored(pair.Key) ? TileView.FogState.Explored
+                    : TileView.FogState.Hidden;
+                pair.Value.SetFog(state);
             }
         }
 

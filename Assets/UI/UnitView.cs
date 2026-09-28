@@ -9,6 +9,12 @@ namespace DungeonTower.UI
     /// the Nethack-style plan. Swap for sprites later without touching
     /// BattleController. Call Refresh() any time the unit's position or
     /// alive-state changes.
+    ///
+    /// Visible on screen requires BOTH alive and fog-visible: the party's
+    /// own units are always fog-visible (BattleController never hides
+    /// them), while an enemy is only shown while standing on a currently
+    /// lit tile. Defaults to fog-visible so any scene that never calls
+    /// SetFogVisible behaves exactly as before fog existed.
     /// </summary>
     public sealed class UnitView : MonoBehaviour
     {
@@ -17,6 +23,7 @@ namespace DungeonTower.UI
         [SerializeField] private Color _enemyColor = Color.red;
 
         private CombatUnit _unit;
+        private bool _fogVisible = true;
 
         public void Bind(CombatUnit unit, char symbol)
         {
@@ -30,7 +37,19 @@ namespace DungeonTower.UI
         {
             if (_unit == null) return;
             transform.position = GridToWorld.ToWorldPosition(_unit.Position);
-            gameObject.SetActive(_unit.IsAlive);
+            ApplyVisibility();
+        }
+
+        public void SetFogVisible(bool visible)
+        {
+            _fogVisible = visible;
+            ApplyVisibility();
+        }
+
+        private void ApplyVisibility()
+        {
+            if (_unit == null) return;
+            gameObject.SetActive(_unit.IsAlive && _fogVisible);
         }
 
         // Visual cue for whose turn it is — bigger and bold while active,

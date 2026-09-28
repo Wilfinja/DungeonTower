@@ -45,6 +45,35 @@ namespace DungeonTower.Items
         [Header("Cleanse (EffectKind = Cleanse) — leave empty to remove every harmful status")]
         [SerializeField] private List<StatusEffectId> _cleanses = new List<StatusEffectId>();
 
+        [Header("Push / Pull / Swap (any EffectKind)")]
+        [Tooltip("Tiles to knock the target away from the attacker; negative pulls it toward the attacker instead. 0 = none.")]
+        [SerializeField] private int _pushDistance;
+        [Tooltip("Instantly swaps the attacker's and target's positions. Don't combine with a nonzero Push Distance.")]
+        [SerializeField] private bool _swapWithCaster;
+
+        [Header("Summon (EffectKind = Summon) — footprint comes from AreaShape/AreaRadius above")]
+        [SerializeField] private SummonTriggerMode _summonTriggerMode = SummonTriggerMode.None;
+        [Tooltip("Reach beyond the footprint that OnRoundTick still affects. Unused by OnEntry/None.")]
+        [SerializeField, Min(0)] private int _auraRadius;
+        [Tooltip("Who Statuses apply to, relative to the owner: allies (a beneficial totem/aura) or everyone else (hostile).")]
+        [SerializeField] private bool _summonAffectsAllies;
+        [Tooltip("OnEntry only: skip the owner's own faction (the usual case for a trap).")]
+        [SerializeField] private bool _summonIgnoreOwnerFaction = true;
+        [Tooltip("OnEntry only: remove after firing once (Trap) vs. keep firing on every entry (a hazard zone).")]
+        [SerializeField] private bool _summonConsumedAfterTrigger = true;
+        [Tooltip("No visible marker until it triggers.")]
+        [SerializeField] private bool _summonIsHidden;
+        [Tooltip("Rounds before this expires on its own. 0 or less = no duration cap.")]
+        [SerializeField] private int _summonDuration;
+        [Tooltip("HP before this is destroyed by damage. 0 or less = indestructible.")]
+        [SerializeField] private int _summonMaxHp;
+        [Tooltip("Tied to the caster — removed the instant they move, die, or Summon Duration runs out (Aura). Off for an independent object (Totem/Trap/Wall/Cloud).")]
+        [SerializeField] private bool _endsIfOwnerMoves;
+        [Tooltip("Blocks movement onto the footprint (impassable terrain / a solid Wall).")]
+        [SerializeField] private bool _summonBlocksMovement;
+        [Tooltip("Blocks line of sight through the footprint without blocking movement (an obscuring cloud; also usually on for a solid Wall).")]
+        [SerializeField] private bool _summonBlocksLineOfSight;
+
         [Header("Targeting")]
         [SerializeField, Min(1)] private int _range = 1;
         [SerializeField] private AttackShape _areaShape = AttackShape.Single;
@@ -69,5 +98,20 @@ namespace DungeonTower.Items
             => _statuses ?? (IReadOnlyList<StatusApplication>)Array.Empty<StatusApplication>();
         public IReadOnlyList<StatusEffectId> Cleanses
             => _cleanses ?? (IReadOnlyList<StatusEffectId>)Array.Empty<StatusEffectId>();
+
+        public int PushDistance => _pushDistance;
+        public bool SwapWithCaster => _swapWithCaster;
+
+        public SummonTriggerMode SummonTriggerMode => _summonTriggerMode;
+        public int AuraRadius => _auraRadius;
+        public bool SummonAffectsAllies => _summonAffectsAllies;
+        public bool SummonIgnoreOwnerFaction => _summonIgnoreOwnerFaction;
+        public bool SummonConsumedAfterTrigger => _summonConsumedAfterTrigger;
+        public bool SummonIsHidden => _summonIsHidden;
+        public int SummonDuration => _summonDuration;
+        public int SummonMaxHp => _summonMaxHp;
+        public bool EndsIfOwnerMoves => _endsIfOwnerMoves;
+        public bool SummonBlocksMovement => _summonBlocksMovement;
+        public bool SummonBlocksLineOfSight => _summonBlocksLineOfSight;
     }
 }

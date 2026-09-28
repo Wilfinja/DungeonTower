@@ -9,7 +9,7 @@ namespace DungeonTower.UI
     /// follows one CombatUnit around the battlefield. Every frame it
     /// reads the unit's HP and position, converts the position from
     /// world space to canvas space, and shows/hides the Slider (hidden
-    /// at full health or when dead).
+    /// at full health, when dead, or when fog-hidden).
     ///
     /// The root object must stay active so LateUpdate keeps running —
     /// only the child Slider is toggled. Runs after CameraFollow (which
@@ -27,6 +27,7 @@ namespace DungeonTower.UI
         private Canvas _canvas;
         private RectTransform _rect;
         private RectTransform _parentRect;
+        private bool _fogVisible = true;
 
         public void Bind(CombatUnit unit)
         {
@@ -38,6 +39,10 @@ namespace DungeonTower.UI
             UpdateBar();
         }
 
+        // Defaults to true, so a scene that never calls this behaves
+        // exactly as before fog existed.
+        public void SetFogVisible(bool visible) => _fogVisible = visible;
+
         private void LateUpdate() => UpdateBar();
 
         private void UpdateBar()
@@ -45,7 +50,7 @@ namespace DungeonTower.UI
             if (_unit == null) return;
 
             int max = _unit.Stats.MaxHp;
-            bool show = _unit.IsAlive && max > 0 && _unit.CurrentHp < max;
+            bool show = _unit.IsAlive && _fogVisible && max > 0 && _unit.CurrentHp < max;
             _slider.gameObject.SetActive(show);
             if (!show) return;
 

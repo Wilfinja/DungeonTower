@@ -9,6 +9,14 @@ namespace DungeonTower.UI
     /// distinguish floor/wall for now — swap for real tile art later
     /// without touching anything else. Needs a Collider2D on the prefab
     /// (a BoxCollider2D is enough) so BattleController can detect clicks.
+    ///
+    /// Fog and the Move/Attack/Preview highlight are independent layers
+    /// that both feed the same renderer: SetFog picks Hidden (solid
+    /// black, no highlight shows through — there's nothing to highlight
+    /// on a tile you can't see), Explored (the normal/highlight color,
+    /// darkened — remembered but not currently lit), or Visible (full
+    /// color, exactly as before fog existed). Fog defaults to Visible so
+    /// any scene that never calls SetFog renders exactly as it always did.
     /// </summary>
     [RequireComponent(typeof(SpriteRenderer))]
     public sealed class TileView : MonoBehaviour
@@ -18,9 +26,13 @@ namespace DungeonTower.UI
         [SerializeField] private Color _moveHighlightColor = new Color(0.25f, 0.55f, 0.85f);
         [SerializeField] private Color _attackHighlightColor = new Color(0.85f, 0.3f, 0.3f);
         [SerializeField] private Color _previewHighlightColor = new Color(0.9f, 0.75f, 0.2f);
+        [SerializeField] private Color _hiddenColor = Color.black;
+        [SerializeField, Range(0f, 1f)] private float _exploredDarken = 0.35f;
 
         private SpriteRenderer _renderer;
         private TileType _type;
+        private HighlightState _highlightState = HighlightState.None;
+        private FogState _fogState = FogState.Visible;
 
         public GridPosition Position { get; private set; }
 
@@ -29,7 +41,7 @@ namespace DungeonTower.UI
             Position = position;
             _type = type;
             if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
-            _renderer.color = BaseColor;
+            ApplyColor();
         }
 
         // Preview is the live AoE-footprint overlay shown while hovering
@@ -37,16 +49,44 @@ namespace DungeonTower.UI
         // set of currently-valid target tiles).
         public enum HighlightState { None, Move, Attack, Preview }
 
+        // Hidden = never explored (solid black). Explored = seen before,
+        // not currently in view (darkened). Visible = currently lit.
+        public enum FogState { Hidden, Explored, Visible }
+
         public void SetHighlighted(HighlightState state)
         {
+            _highlightState = state;
+            ApplyColor();
+        }
+
+        public void SetFog(FogState state)
+        {
+            _fogState = state;
+            ApplyColor();
+        }
+
+        private void ApplyColor()
+        {
             if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
-            _renderer.color = state switch
+
+            if (_fogState == FogState.Hidden)
+            {
+                _renderer.color = _hiddenColor;
+                return;
+            }
+
+            var color = _highlightState switch
             {
                 HighlightState.Move => _moveHighlightColor,
                 HighlightState.Attack => _attackHighlightColor,
                 HighlightState.Preview => _previewHighlightColor,
                 _ => BaseColor
             };
+
+            if (_fogState == FogState.Explored)
+                color = new Color(color.r * _exploredDarken, color.g * _exploredDarken, color.b * _exploredDarken, color.a);
+
+            _renderer.color = color;
         }
 
         private Color BaseColor => _type == TileType.Wall ? _wallColor : _floorColor;
