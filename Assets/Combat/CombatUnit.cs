@@ -137,9 +137,22 @@ namespace DungeonTower.Combat
             CurrentMp = Math.Min(CurrentMp, Stats.MaxMp);
         }
 
-        public void ApplyDamage(int amount)
+        public void ApplyDamage(int amount) => ApplyDamage(amount, out _);
+
+        public void ApplyDamage(int amount, out bool savedBySecondWind)
         {
-            CurrentHp = Math.Max(0, CurrentHp - Math.Max(0, amount));
+            savedBySecondWind = false;
+            amount = Math.Max(0, amount);
+
+            if (amount >= CurrentHp && CurrentHp > 0 && Status.Has(StatusEffectId.SecondWind))
+            {
+                Status.Remove(StatusEffectId.SecondWind);
+                CurrentHp = 1;
+                savedBySecondWind = true;
+                return;
+            }
+
+            CurrentHp = Math.Max(0, CurrentHp - amount);
         }
 
         public void SpendMp(int amount)

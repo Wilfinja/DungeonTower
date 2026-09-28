@@ -10,13 +10,16 @@ namespace DungeonTower.Core
     /// Status has no primary effect of its own — it exists purely to
     /// carry the ability's Statuses list (a poison dart, a stun, a
     /// haste scroll). Any other kind can ALSO carry Statuses as on-hit
-    /// procs. APPEND-ONLY, like StatusEffectId — serialized by value.
+    /// procs. Cleanse removes statuses from each target instead of
+    /// adding any (see IAbility.Cleanses). APPEND-ONLY, like
+    /// StatusEffectId — serialized by value.
     /// </summary>
     public enum EffectKind
     {
         Damage,
         Heal,
         Buff,
-        Status
+        Status,
+        Cleanse
     }
 }

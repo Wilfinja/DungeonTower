@@ -38,6 +38,13 @@ namespace DungeonTower.Items
         [Header("Statuses (the payload for EffectKind = Status; on-hit procs for any other kind)")]
         [SerializeField] private List<StatusApplication> _statuses = new List<StatusApplication>();
 
+        [Header("Silence")]
+        [Tooltip("If ticked, a Silenced unit can't use this from an equipped weapon. Scrolls are always blocked by Silence and potions never are, regardless of this box.")]
+        [SerializeField] private bool _silenceable;
+
+        [Header("Cleanse (EffectKind = Cleanse) — leave empty to remove every harmful status")]
+        [SerializeField] private List<StatusEffectId> _cleanses = new List<StatusEffectId>();
+
         [Header("Targeting")]
         [SerializeField, Min(1)] private int _range = 1;
         [SerializeField] private AttackShape _areaShape = AttackShape.Single;
@@ -55,9 +62,12 @@ namespace DungeonTower.Items
         public AttackShape AreaShape => _areaShape;
         public int AreaRadius => _areaRadius;
         public int CooldownTurns => _cooldownTurns;
+        public bool Silenceable => _silenceable;
 
-        // Never null, even for an asset serialized before this field existed.
+        // Never null, even for an asset serialized before these fields existed.
         public IReadOnlyList<StatusApplication> Statuses
             => _statuses ?? (IReadOnlyList<StatusApplication>)Array.Empty<StatusApplication>();
+        public IReadOnlyList<StatusEffectId> Cleanses
+            => _cleanses ?? (IReadOnlyList<StatusEffectId>)Array.Empty<StatusEffectId>();
     }
 }

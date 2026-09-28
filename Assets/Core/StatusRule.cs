@@ -21,7 +21,12 @@ namespace DungeonTower.Core
         RefreshDuration,
         // Magnitude becomes the higher of old/new; duration refreshes
         // to the longer of old/new. Burn.
-        KeepStronger
+        KeepStronger,
+        // Magnitude ADDS, and the countdown SHORTENS by ReapplyDurationShift
+        // (floored at 1 — it still detonates on the owner's next turn, never
+        // instantly). Doom: every further Doom hit adds damage and moves the
+        // detonation closer.
+        Accelerate
     }
 
     /// <summary>
@@ -50,6 +55,7 @@ namespace DungeonTower.Core
         public bool UsesDuration { get; }
         public bool TicksDurationAtTurnStart { get; }
         public int DefaultDuration { get; }
+        public int ReapplyDurationShift { get; }
 
         public StatusRule(
             StatusPolarity polarity,
@@ -59,7 +65,8 @@ namespace DungeonTower.Core
             float magnitudeDecayPerTurn = 0f,
             bool usesDuration = false,
             bool ticksDurationAtTurnStart = false,
-            int defaultDuration = 0)
+            int defaultDuration = 0,
+            int reapplyDurationShift = 0)
         {
             Polarity = polarity;
             Reapply = reapply;
@@ -69,6 +76,7 @@ namespace DungeonTower.Core
             UsesDuration = usesDuration;
             TicksDurationAtTurnStart = ticksDurationAtTurnStart;
             DefaultDuration = defaultDuration;
+            ReapplyDurationShift = reapplyDurationShift;
         }
     }
 
@@ -103,8 +111,11 @@ namespace DungeonTower.Core
             // Reapply = KeepStronger is an assumption ("similar to Poison" could
             // also mean the percentages add) — change if so.
             t[StatusEffectId.Burn] = new StatusRule(StatusPolarity.Harmful, ReapplyMode.KeepStronger, magnitudeDecayPerTurn: 5f);
-            // Doom (spec): a countdown that detonates at 0. Ticks at turn START.
-            t[StatusEffectId.Doom] = Timed(StatusPolarity.Harmful, 3, ReapplyMode.AddStacks, atTurnStart: true);
+            // Doom (spec): a countdown (Duration) that detonates for Magnitude damage at 0, hurting
+            // only the doomed unit. Ticks at turn START. Each further Doom application adds its
+            // Magnitude and shortens the countdown by 2. Cleanse defuses it.
+            t[StatusEffectId.Doom] = new StatusRule(StatusPolarity.Harmful, ReapplyMode.Accelerate,
+                usesDuration: true, ticksDurationAtTurnStart: true, defaultDuration: 3, reapplyDurationShift: -2);
 
             // --- Timed stat modifiers ---
             t[StatusEffectId.Weaken] = Timed(StatusPolarity.Harmful, 2);
@@ -122,7 +133,9 @@ namespace DungeonTower.Core
             // --- Reactive / flags ---
             t[StatusEffectId.Mark] = Timed(StatusPolarity.Harmful, 3);
             t[StatusEffectId.Thorns] = Timed(StatusPolarity.Beneficial, 3);
-            t[StatusEffectId.Momentum] = Timed(StatusPolarity.Beneficial, 1);
+            // Momentum: a turn is ONE action (move OR attack), so the sequence is cast -> move -> attack;
+            // 3 turns covers it with one spare.
+            t[StatusEffectId.Momentum] = Timed(StatusPolarity.Beneficial, 3);
             t[StatusEffectId.Ward] = Timed(StatusPolarity.Beneficial, 3, ReapplyMode.KeepStronger);
             // Second Wind (spec): a one-shot save — no decay, lasts until consumed.
             t[StatusEffectId.SecondWind] = new StatusRule(StatusPolarity.Beneficial, ReapplyMode.RefreshDuration);

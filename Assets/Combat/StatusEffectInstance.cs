@@ -31,6 +31,11 @@ namespace DungeonTower.Combat
         // that point back at a specific unit — Taunt, Doom credit, etc.
         public CombatUnit Source { get; internal set; }
 
+        // Momentum: set when the owner moves, consumed by its next
+        // Damage-kind attack. Generic "armed" flag for any status that
+        // needs a two-step trigger.
+        public bool Primed { get; internal set; }
+
         // True when applied during the owner's own turn to a status whose
         // duration ticks at turn END — without this, a self-buff would
         // lose a turn of duration before the owner ever benefits from it.

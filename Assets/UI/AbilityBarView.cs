@@ -25,6 +25,8 @@ namespace DungeonTower.UI
     {
         [SerializeField] private Button _moveButton;
         [SerializeField] private TextMeshProUGUI _moveLabel;
+        [SerializeField] private Button _waitButton;
+        public event Action WaitSelected;
         [SerializeField] private Button _button1;
         [SerializeField] private Button _button2;
         [SerializeField] private TextMeshProUGUI _label1;
@@ -38,31 +40,38 @@ namespace DungeonTower.UI
             _moveButton.onClick.AddListener(() => MoveSelected?.Invoke());
             _button1.onClick.AddListener(() => AbilitySelected?.Invoke(0));
             _button2.onClick.AddListener(() => AbilitySelected?.Invoke(1));
+            if (_waitButton != null) _waitButton.onClick.AddListener(() => WaitSelected?.Invoke());
         }
 
         // remainingCooldown(ability) should return 0 for "ready", or the
         // number of the unit's own turns left before it's usable again.
-        public void Show(IWeapon weapon, Func<IAbility, int> remainingCooldown)
+        public void Show(IWeapon weapon, Func<IAbility, int> remainingCooldown, Func<IAbility, bool> isBlocked = null)
         {
             gameObject.SetActive(true);
             _moveButton.gameObject.SetActive(true);
+            if (_waitButton != null) _waitButton.gameObject.SetActive(true);
 
             bool hasFirst = weapon != null && weapon.Abilities.Count > 0;
             bool hasSecond = weapon != null && weapon.Abilities.Count > 1;
 
             _button1.gameObject.SetActive(hasFirst);
-            if (hasFirst) SetAbilityButton(_button1, _label1, weapon.Abilities[0], remainingCooldown);
+            if (hasFirst) SetAbilityButton(_button1, _label1, weapon.Abilities[0], remainingCooldown, isBlocked);
 
             _button2.gameObject.SetActive(hasSecond);
-            if (hasSecond) SetAbilityButton(_button2, _label2, weapon.Abilities[1], remainingCooldown);
+            if (hasSecond) SetAbilityButton(_button2, _label2, weapon.Abilities[1], remainingCooldown, isBlocked);
         }
 
-        private static void SetAbilityButton(Button button, TextMeshProUGUI label, IAbility ability, Func<IAbility, int> remainingCooldown)
+        private static void SetAbilityButton(Button button, TextMeshProUGUI label, IAbility ability,
+            Func<IAbility, int> remainingCooldown, Func<IAbility, bool> isBlocked)
         {
             int remaining = remainingCooldown != null ? remainingCooldown(ability) : 0;
             bool onCooldown = remaining > 0;
-            button.interactable = !onCooldown;
-            label.text = onCooldown ? $"{ability.Name} ({remaining})" : ability.Name;
+            bool blocked = isBlocked != null && isBlocked(ability);
+
+            button.interactable = !onCooldown && !blocked;
+            label.text = blocked ? $"{ability.Name} (silenced)"
+                : onCooldown ? $"{ability.Name} ({remaining})"
+                : ability.Name;
         }
 
         // Weaponless units have nothing to swing, but they can still
@@ -73,6 +82,7 @@ namespace DungeonTower.UI
             _moveButton.gameObject.SetActive(true);
             _button1.gameObject.SetActive(false);
             _button2.gameObject.SetActive(false);
+            if (_waitButton != null) _waitButton.gameObject.SetActive(true);
         }
 
         public void Hide()

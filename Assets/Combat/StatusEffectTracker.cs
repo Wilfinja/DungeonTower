@@ -87,6 +87,7 @@ namespace DungeonTower.Combat
             }
             else
             {
+                bool durationHandled = false;
                 switch (rule.Reapply)
                 {
                     case ReapplyMode.AddStacks:
@@ -100,12 +101,19 @@ namespace DungeonTower.Combat
                         outcome = StatusApplyOutcome.Refreshed;
                         break;
 
+                    case ReapplyMode.Accelerate:
+                        instance.Magnitude += app.Magnitude;
+                        instance.Duration = Math.Max(1, instance.Duration + rule.ReapplyDurationShift);
+                        durationHandled = true;
+                        outcome = StatusApplyOutcome.Stacked;
+                        break;
+
                     default: // RefreshDuration
                         outcome = StatusApplyOutcome.Refreshed;
                         break;
                 }
 
-                instance.Duration = Math.Max(instance.Duration, duration);
+                if (!durationHandled) instance.Duration = Math.Max(instance.Duration, duration);
                 if (source != null) instance.Source = source;
             }
 
@@ -140,6 +148,14 @@ namespace DungeonTower.Combat
         public int Cleanse()
             => RemoveWhere(i => StatusRules.Get(i.Id).Polarity == StatusPolarity.Harmful);
 
+        // Targeted cleanse: empty/null = every Harmful status (same as
+        // Cleanse()); otherwise exactly the listed ids, any polarity.
+        public int Cleanse(IReadOnlyList<StatusEffectId> only)
+        {
+            if (only == null || only.Count == 0) return Cleanse();
+            return RemoveWhere(i => only.Contains(i.Id));
+        }
+
         public void Clear()
         {
             _active.Clear();
@@ -160,6 +176,8 @@ namespace DungeonTower.Combat
 
             foreach (var instance in Snapshot())
             {
+                if (!_owner.IsAlive) break;   // an earlier tick (or a Doom detonation) already killed the owner
+
                 var rule = StatusRules.Get(instance.Id);
                 var behavior = StatusBehaviors.Get(instance.Id);
 
@@ -176,6 +194,25 @@ namespace DungeonTower.Combat
             RefreshBonuses();
             result.OwnerDied = !_owner.IsAlive;
             result.SkipTurn = _owner.IsAlive && !CanAct;
+            return result;
+        }
+
+        /// <summary>
+        /// Call right after the owner moves, on every move path. Runs each
+        /// status's OnMoved (Momentum arms, later Bleed hurts). Check
+        /// OwnerDied and run death handling if set.
+        /// </summary>
+        public StatusTickResult OnMoved()
+        {
+            var result = new StatusTickResult();
+
+            foreach (var instance in Snapshot())
+            {
+                StatusBehaviors.Get(instance.Id)?.OnMoved(_owner, instance, result);
+                if (!_owner.IsAlive) break;
+            }
+
+            result.OwnerDied = !_owner.IsAlive;
             return result;
         }
 

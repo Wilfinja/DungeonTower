@@ -1,12 +1,14 @@
+using DungeonTower.Combat;
+using DungeonTower.Core;
+using DungeonTower.Generation;
+using DungeonTower.Items;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using DungeonTower.Core;
-using DungeonTower.Combat;
-using DungeonTower.Generation;
-using DungeonTower.Items;
+using static UnityEngine.GraphicsBuffer;
 
 namespace DungeonTower.UI
 {
@@ -108,6 +110,7 @@ namespace DungeonTower.UI
         {
             _abilityBar.AbilitySelected += OnAbilitySelected;
             _abilityBar.MoveSelected += OnMoveSelected;
+            _abilityBar.WaitSelected += OnWaitSelected;
             _inventoryPanel.WeaponEquipRequested += OnWeaponEquipRequested;
             _inventoryPanel.ArmorEquipRequested += OnArmorEquipRequested;
             _inventoryPanel.PotionUseRequested += OnPotionUseRequested;
@@ -127,6 +130,7 @@ namespace DungeonTower.UI
             {
                 _abilityBar.AbilitySelected -= OnAbilitySelected;
                 _abilityBar.MoveSelected -= OnMoveSelected;
+                _abilityBar.WaitSelected -= OnWaitSelected;
             }
             if (_inventoryPanel != null)
             {
@@ -475,7 +479,8 @@ namespace DungeonTower.UI
                 _inventoryPanel.SetTargetMode(IsInCombat(), _partyMembers.IndexOf(unit), unit.Belt);
                 RefreshLootAvailability(unit);
 
-                if (unit.EquippedWeapon != null) _abilityBar.Show(unit.EquippedWeapon, unit.GetRemainingCooldown);
+                if (unit.EquippedWeapon != null) _abilityBar.Show(unit.EquippedWeapon, unit.GetRemainingCooldown,
+    a => SilenceRules.IsBlocked(unit, a, AbilitySource.Weapon));
                 else _abilityBar.ShowMoveOnly();
 
                 SetMode(ActionMode.Move);
@@ -502,8 +507,10 @@ namespace DungeonTower.UI
             {
                 case ActionMode.Move:
                     _selectedAbilityIndex = 0;
-                    _reachableTiles = MovementRangeCalculator.GetReachableTiles(
-                        unit.Position, unit.Stats.MoveRange, _map, OccupiedTilesExcluding(unit));
+                    _reachableTiles = unit.Status.CanMove
+                        ? MovementRangeCalculator.GetReachableTiles(
+                         unit.Position, unit.Stats.MoveRange, _map, OccupiedTilesExcluding(unit))
+                        : new HashSet<GridPosition> { unit.Position };
                     _gridView.SetHighlights(_reachableTiles, Enumerable.Empty<GridPosition>());
                     _abilityBar.SetSelected(-1);
                     break;
@@ -533,6 +540,30 @@ namespace DungeonTower.UI
             SetMode(ActionMode.Move);
         }
 
+        // Ends the turn without moving or acting. Not a move, so it never arms
+        // Momentum and never triggers Bleed.
+        private void OnWaitSelected()
+        {
+            if (_battle == null || _battle.Outcome != BattleOutcome.InProgress) return;
+            var unit = _battle.CurrentUnit;
+            if (unit.Faction != Faction.Player) return;
+
+            Debug.Log($"{unit.DisplayName} waits.");
+            _pendingScroll = null;
+            EndTurn();
+        }
+
+        // Every move goes through here so on-move statuses fire on all paths:
+        // player clicks, enemy chasing, enemy roaming. (Momentum now, Bleed in Phase 3.)
+        private void MoveUnit(CombatUnit unit, GridPosition destination)
+        {
+            unit.Position = destination;
+            var moveTick = unit.Status.OnMoved();
+            foreach (var line in moveTick.Log) Debug.Log(line);
+            _unitViews[unit].Refresh();
+            if (moveTick.OwnerDied) HandleDeath(unit);
+        }
+
         private void OnAbilitySelected(int index)
         {
             if (_battle == null || _battle.Outcome != BattleOutcome.InProgress) return;
@@ -544,6 +575,12 @@ namespace DungeonTower.UI
             if (unit.IsOnCooldown(ability))
             {
                 Debug.Log($"{ability.Name} is on cooldown ({unit.GetRemainingCooldown(ability)} turn(s) left).");
+                return;
+            }
+
+            if (SilenceRules.IsBlocked(unit, ability, AbilitySource.Weapon))
+            {
+                Debug.Log($"{unit.DisplayName} is silenced and can't use {ability.Name}.");
                 return;
             }
 
@@ -647,6 +684,11 @@ namespace DungeonTower.UI
                     break;
                 case EffectKind.Status:
                     break;
+                case EffectKind.Cleanse:
+                    int removed = unit.Status.Cleanse(ability.Cleanses);
+                    _unitViews[unit].Refresh();
+                    Debug.Log($"{unit.DisplayName} uses {ability.Name} on {unit.DisplayName}, removing {removed} status effect(s).");
+                    break;
                 default:
                     Debug.LogWarning($"{potion.Name}'s ability is {ability.EffectKind}-kind, which isn't meaningful for a self-used potion — nothing happened.");
                     break;
@@ -675,6 +717,11 @@ namespace DungeonTower.UI
             if (unit.IsOnCooldown(scroll.Ability))
             {
                 Debug.Log($"{scroll.Name} cannot be read yet — {scroll.Ability.Name} is on cooldown ({unit.GetRemainingCooldown(scroll.Ability)} turn(s) left).");
+                return;
+            }
+            if (SilenceRules.IsBlocked(unit, scroll.Ability, AbilitySource.Scroll))
+            {
+                Debug.Log($"{unit.DisplayName} is silenced and can't read {scroll.Name}.");
                 return;
             }
 
@@ -717,7 +764,8 @@ namespace DungeonTower.UI
         {
             if (unit == null || unit.Faction != Faction.Player) return;
 
-            if (unit.EquippedWeapon != null) _abilityBar.Show(unit.EquippedWeapon, unit.GetRemainingCooldown);
+            if (unit.EquippedWeapon != null) _abilityBar.Show(unit.EquippedWeapon, unit.GetRemainingCooldown,
+    a => SilenceRules.IsBlocked(unit, a, AbilitySource.Weapon));
             else _abilityBar.ShowMoveOnly();
 
             SetMode(ActionMode.Move);
@@ -753,14 +801,25 @@ namespace DungeonTower.UI
         // yourself).
         private List<GridPosition> GetSingleTargetTiles(CombatUnit unit, IAbility ability)
         {
-            bool targetAllies = ability.EffectKind != EffectKind.Damage;
-            return _unitViews.Keys
+            bool targetAllies = AbilityTargeting.TargetsAllies(ability);
+            var tiles = _unitViews.Keys
                 .Where(u => u.IsAlive
                     && (targetAllies ? u.Faction == unit.Faction : u.Faction != unit.Faction)
                     && u.Position.ManhattanDistance(unit.Position) <= ability.Range
                     && LineOfSight.HasClearPath(unit.Position, u.Position, _map))
                 .Select(u => u.Position)
                 .ToList();
+
+            // Taunted: if the taunter is a legal target right now, they're the ONLY one.
+            // (Out of range/LOS -> no restriction. Area abilities are never restricted.)
+            if (!targetAllies)
+            {
+                var forced = TauntRules.GetForcedTarget(unit);
+                if (forced != null && tiles.Contains(forced.Position))
+                    return new List<GridPosition> { forced.Position };
+            }
+
+            return tiles;
         }
 
         private bool InBounds(GridPosition pos) => pos.X >= 0 && pos.X < _map.Width && pos.Y >= 0 && pos.Y < _map.Height;
@@ -909,11 +968,20 @@ namespace DungeonTower.UI
 
         private void HandleMoveClick(CombatUnit acting, GridPosition target)
         {
+            if (!acting.Status.CanMove)
+            {
+                if (target.Equals(acting.Position))
+                {
+                    Debug.Log($"{acting.DisplayName} is rooted and holds position.");
+                    EndTurn();
+                }
+                return;
+            }
+
             var occupant = FindLivingUnitAt(target);
             if (occupant == null && _reachableTiles.Contains(target))
             {
-                acting.Position = target;
-                _unitViews[acting].Refresh();
+                MoveUnit(acting, target);
                 EndTurn();
             }
         }
@@ -932,7 +1000,7 @@ namespace DungeonTower.UI
 
         private void RunEnemyTurn(CombatUnit enemy)
         {
-            var target = FindNearestPlayer(enemy);
+            var target = TauntRules.GetForcedTarget(enemy) ?? FindNearestPlayer(enemy);
             if (target == null)
             {
                 EndTurn();
@@ -948,11 +1016,10 @@ namespace DungeonTower.UI
                 }
                 else
                 {
-                    var step = RoamAI.ChooseStep(enemy, _map, OccupiedTilesExcluding(enemy), _rng);
-                    if (step.HasValue)
+                    if (enemy.Status.CanMove)
                     {
-                        enemy.Position = step.Value;
-                        _unitViews[enemy].Refresh();
+                        var step = RoamAI.ChooseStep(enemy, _map, OccupiedTilesExcluding(enemy), _rng);
+                        if (step.HasValue) MoveUnit(enemy, step.Value);
                     }
                     EndTurn();
                     return;
@@ -977,8 +1044,7 @@ namespace DungeonTower.UI
                 var step = ChooseEnemyStep(enemy, target, range, reachable);
                 if (step.HasValue)
                 {
-                    enemy.Position = step.Value;
-                    _unitViews[enemy].Refresh();
+                    MoveUnit(enemy, step.Value);
                 }
             }
 
@@ -1054,7 +1120,7 @@ namespace DungeonTower.UI
             // in it, same as most tactics games); Heal/Buff AoE includes
             // them, since standing in your own heal nova should heal
             // you too.
-            bool excludeCaster = ability.EffectKind == EffectKind.Damage;
+            bool excludeCaster = !AbilityTargeting.TargetsAllies(ability);
 
             foreach (var target in _unitViews.Keys.ToList())
             {
@@ -1091,6 +1157,12 @@ namespace DungeonTower.UI
 
                 case EffectKind.Status:
                     // No primary effect — the ability's Statuses are the whole payload.
+                    break;
+
+                case EffectKind.Cleanse:
+                    int removed = target.Status.Cleanse(ability.Cleanses);
+                    _unitViews[target].Refresh();
+                    Debug.Log($"{attacker.DisplayName} uses {ability.Name} on {target.DisplayName}, removing {removed} status effect(s).");
                     break;
             }
 
@@ -1134,14 +1206,19 @@ namespace DungeonTower.UI
         private void ResolveAttack(CombatUnit attacker, CombatUnit defender, IAbility ability)
         {
             var result = AttackResolver.Resolve(attacker, defender, ability, _rng);
-            bool wasAlive = defender.IsAlive;
-            defender.ApplyDamage(result.Damage);
+            bool defenderWasAlive = defender.IsAlive;
+            bool attackerWasAlive = attacker.IsAlive;
+
+            var outcome = DamagePipeline.Apply(attacker, defender, result.Damage);
+
             AlertUnit(defender);
             _unitViews[defender].Refresh();
-            Debug.Log($"{attacker.DisplayName} uses {ability.Name} on {defender.DisplayName} for {result.Damage} {ability.Kind}{(result.IsCrit ? " (CRIT)" : "")}");
+            _unitViews[attacker].Refresh();
+            Debug.Log($"{attacker.DisplayName} uses {ability.Name} on {defender.DisplayName} for {outcome.HpLost} {ability.Kind}{(result.IsCrit ? " (CRIT)" : "")}");
+            foreach (var line in outcome.Log) Debug.Log(line);
 
-            if (wasAlive && !defender.IsAlive)
-                HandleDeath(defender);
+            if (defenderWasAlive && !defender.IsAlive) HandleDeath(defender);
+            if (attackerWasAlive && !attacker.IsAlive) HandleDeath(attacker);   // died to thorns
         }
 
         // No revive exists — a dead unit is gone for the rest of the run.
@@ -1404,7 +1481,8 @@ namespace DungeonTower.UI
             if (weapon == null) return null;
 
             foreach (var ability in weapon.Abilities)
-                if (!unit.IsOnCooldown(ability))
+                if (!unit.IsOnCooldown(ability)
+                    && !SilenceRules.IsBlocked(unit, ability, AbilitySource.Weapon))
                     return ability;
 
             return null;

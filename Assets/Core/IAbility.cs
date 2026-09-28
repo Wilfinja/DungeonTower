@@ -50,5 +50,18 @@ namespace DungeonTower.Core
         // whole payload for EffectKind.Status, on-hit procs for every
         // other kind. Empty (never null) when none.
         IReadOnlyList<StatusApplication> Statuses { get; }
+
+        // True if the Silence status stops a unit from using this when it
+        // comes from an equipped weapon. (Scrolls are always blocked by
+        // Silence and potions never are — see SilenceRules — so this flag
+        // only matters on weapon abilities.) Defaults to false, so every
+        // existing ability keeps working while silenced.
+        bool Silenceable { get; }
+
+        // Cleanse-only. Which statuses to strip from each target: empty
+        // means "every Harmful status" (a general cleanse); otherwise
+        // exactly the listed ones, whatever their polarity (a Bandage
+        // lists just Bleed). Empty (never null) when unused.
+        IReadOnlyList<StatusEffectId> Cleanses { get; }
     }
 }

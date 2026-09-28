@@ -1,8 +1,8 @@
 namespace DungeonTower.Core
 {
     /// <summary>
-    /// Who an ability is aimed at. Damage hits enemies; Heal/Buff help
-    /// allies; a Status ability follows the polarity of what it applies —
+    /// Who an ability is aimed at. Damage hits enemies; Heal/Buff/Cleanse
+    /// help allies; a Status ability follows the polarity of what it applies —
     /// all-Beneficial statuses target allies, anything containing a
     /// Harmful one targets enemies (a mixed list counts as hostile, so
     /// author beneficial and harmful statuses as separate abilities).
@@ -19,7 +19,7 @@ namespace DungeonTower.Core
                     return false;
                 case EffectKind.Status:
                     return AllBeneficial(ability);
-                default: // Heal, Buff
+                default: // Heal, Buff, Cleanse
                     return true;
             }
         }
