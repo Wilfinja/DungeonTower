@@ -1,12 +1,15 @@
+using System.Collections.Generic;
+
 namespace DungeonTower.Core
 {
     /// <summary>
     /// One thing a weapon, scroll, or potion lets a unit do: EffectKind
-    /// decides what actually happens (deal damage, heal, or grant a
-    /// stat bonus) to whichever target(s) fall in its area; the rest of
-    /// the fields are only meaningful for the EffectKind that uses them —
+    /// decides what actually happens (deal damage, heal, grant a
+    /// permanent stat bonus, or just apply statuses) to whichever
+    /// target(s) fall in its area; the rest of the fields are only
+    /// meaningful for the EffectKind that uses them —
     /// Kind/DamageMultiplier for Damage, HealHp/HealMp for Heal, Bonus
-    /// for Buff. Range/AreaShape/AreaRadius/CooldownTurns apply
+    /// for Buff. Range/AreaShape/AreaRadius/CooldownTurns/Statuses apply
     /// regardless of EffectKind. Damage + AreaShape.Single is a normal
     /// single-target hit — every ability authored before EffectKind or
     /// Cooldown existed keeps behaving exactly as it did, since both
@@ -29,6 +32,7 @@ namespace DungeonTower.Core
 
         // Buff-only — applied as a permanent-for-the-battle addition,
         // same DerivedStatBonus shape ArmorSO already grants passively.
+        // (Timed stat modifiers are Statuses, not this.)
         DerivedStatBonus Bonus { get; }
 
         // Apply to every EffectKind.
@@ -41,5 +45,10 @@ namespace DungeonTower.Core
         // cooldown is per-unit runtime state (tracked on CombatUnit),
         // not stored here — this is just "how long," not "how long left."
         int CooldownTurns { get; }
+
+        // Statuses applied to each target this ability lands on: the
+        // whole payload for EffectKind.Status, on-hit procs for every
+        // other kind. Empty (never null) when none.
+        IReadOnlyList<StatusApplication> Statuses { get; }
     }
 }

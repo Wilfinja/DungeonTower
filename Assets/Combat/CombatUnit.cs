@@ -24,6 +24,7 @@ namespace DungeonTower.Combat
         public int DetectionRadius { get; }
         public int AlertRadius { get; }
         public Belt Belt { get; } = new Belt(BeltSlotCount);
+        public StatusEffectTracker Status { get; }
 
         public GridPosition Position { get; set; }
         public int CurrentHp { get; private set; }
@@ -95,6 +96,7 @@ namespace DungeonTower.Combat
             AlertRadius = alertRadius;
             CurrentHp = stats.MaxHp;
             CurrentMp = stats.MaxMp;
+            Status = new StatusEffectTracker(this);
         }
 
         public bool CanSense(GridPosition position, IWalkableMap map)
@@ -148,6 +150,12 @@ namespace DungeonTower.Combat
         public void Heal(int amount)
         {
             CurrentHp = Math.Min(Stats.MaxHp, CurrentHp + Math.Max(0, amount));
+        }
+
+        public void ClampResources()
+        {
+            CurrentHp = Math.Min(CurrentHp, Stats.MaxHp);
+            CurrentMp = Math.Min(CurrentMp, Stats.MaxMp);
         }
 
         // Mirrors Heal — added for potions/scrolls that restore MP

@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using DungeonTower.Core;
 using UnityEngine;
 
@@ -11,6 +13,10 @@ namespace DungeonTower.Items
     /// exactly one — the same asset type covers all three, so a "Heal"
     /// ability could equally be a staff attack, a scroll cast on an
     /// ally, or a potion's effect.
+    ///
+    /// The Statuses list works on every kind: on EffectKind.Status it IS
+    /// the ability; on Damage/Heal/Buff it's a set of on-hit procs. Old
+    /// assets deserialize with an empty list and behave exactly as before.
     /// </summary>
     [CreateAssetMenu(menuName = "Dungeon Tower/Ability", fileName = "NewAbility")]
     public sealed class AbilitySO : ScriptableObject, IAbility
@@ -26,8 +32,11 @@ namespace DungeonTower.Items
         [SerializeField, Min(0)] private int _healHp;
         [SerializeField, Min(0)] private int _healMp;
 
-        [Header("Buff (EffectKind = Buff)")]
+        [Header("Buff (EffectKind = Buff) — permanent for the battle")]
         [SerializeField] private DerivedStatBonus _bonus;
+
+        [Header("Statuses (the payload for EffectKind = Status; on-hit procs for any other kind)")]
+        [SerializeField] private List<StatusApplication> _statuses = new List<StatusApplication>();
 
         [Header("Targeting")]
         [SerializeField, Min(1)] private int _range = 1;
@@ -46,5 +55,9 @@ namespace DungeonTower.Items
         public AttackShape AreaShape => _areaShape;
         public int AreaRadius => _areaRadius;
         public int CooldownTurns => _cooldownTurns;
+
+        // Never null, even for an asset serialized before this field existed.
+        public IReadOnlyList<StatusApplication> Statuses
+            => _statuses ?? (IReadOnlyList<StatusApplication>)Array.Empty<StatusApplication>();
     }
 }

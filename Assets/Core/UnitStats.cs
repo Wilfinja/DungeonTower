@@ -27,6 +27,7 @@ namespace DungeonTower.Core
         // since there's no "next battle" flow to reset it at — worth
         // revisiting once one exists.
         private DerivedStatBonus _consumableBonus;
+        private DerivedStatBonus _temporaryBonus;
 
         public ClassDefinition Class { get; }
         public int Level { get; private set; }
@@ -38,20 +39,20 @@ namespace DungeonTower.Core
 
         public StatBlock Current => new StatBlock(Body, Mind, Spirit);
 
-        private DerivedStatBonus TotalBonus => (EquippedArmor?.PassiveBonus ?? default) + _consumableBonus;
+        private DerivedStatBonus TotalBonus => (EquippedArmor?.PassiveBonus ?? default) + _consumableBonus + _temporaryBonus;
 
-        public int MaxHp => DerivedStatFormulas.MaxHp(Current) + TotalBonus.Hp;
-        public int MaxMp => DerivedStatFormulas.MaxMp(Current) + TotalBonus.Mp;
-        public float PhysicalAttack => DerivedStatFormulas.PhysicalAttack(Current) + TotalBonus.PhysicalAttack;
-        public float PhysicalDefense => DerivedStatFormulas.PhysicalDefense(Current) + TotalBonus.PhysicalDefense;
-        public float MagicAttack => DerivedStatFormulas.MagicAttack(Current) + TotalBonus.MagicAttack;
-        public float MagicDefense => DerivedStatFormulas.MagicDefense(Current) + TotalBonus.MagicDefense;
-        public int Initiative => DerivedStatFormulas.Initiative(Current) + TotalBonus.Initiative;
-        public int MoveRange => DerivedStatFormulas.MoveRange(Current) + TotalBonus.MoveRange;
-        public float StatusResist => Math.Min(DerivedStatFormulas.StatusResistCapWithGear,
-            DerivedStatFormulas.StatusResist(Current) + TotalBonus.StatusResist);
-        public float CritChance => Math.Min(DerivedStatFormulas.CritCapWithGear,
-            DerivedStatFormulas.CritChance(Current) + TotalBonus.CritChance);
+        public int MaxHp => Math.Max(1, DerivedStatFormulas.MaxHp(Current) + TotalBonus.Hp);
+        public int MaxMp => Math.Max(0, DerivedStatFormulas.MaxMp(Current) + TotalBonus.Mp);
+        public float PhysicalAttack => Math.Max(0f, DerivedStatFormulas.PhysicalAttack(Current) + TotalBonus.PhysicalAttack);
+        public float PhysicalDefense => Math.Max(0f, DerivedStatFormulas.PhysicalDefense(Current) + TotalBonus.PhysicalDefense);
+        public float MagicAttack => Math.Max(0f, DerivedStatFormulas.MagicAttack(Current) + TotalBonus.MagicAttack);
+        public float MagicDefense => Math.Max(0f, DerivedStatFormulas.MagicDefense(Current) + TotalBonus.MagicDefense);
+        public int Initiative => Math.Max(0, DerivedStatFormulas.Initiative(Current) + TotalBonus.Initiative);
+        public int MoveRange => Math.Max(0, DerivedStatFormulas.MoveRange(Current) + TotalBonus.MoveRange);
+        public float StatusResist => Math.Max(0f, Math.Min(DerivedStatFormulas.StatusResistCapWithGear,
+            DerivedStatFormulas.StatusResist(Current) + TotalBonus.StatusResist));
+        public float CritChance => Math.Max(0f, Math.Min(DerivedStatFormulas.CritCapWithGear,
+            DerivedStatFormulas.CritChance(Current) + TotalBonus.CritChance));
 
         public UnitStats(ClassDefinition classDefinition, int startingLevel = 1)
         {
@@ -92,6 +93,8 @@ namespace DungeonTower.Core
         // Applied by a Buff-kind ability (a potion or buff scroll) —
         // stacks additively with whatever's already accumulated.
         public void AddBonus(DerivedStatBonus bonus) => _consumableBonus += bonus;
+
+        public void SetTemporaryBonus(DerivedStatBonus bonus) => _temporaryBonus = bonus;
 
         private static int RoundToInt(float value) => (int)Math.Round(value, MidpointRounding.AwayFromZero);
     }

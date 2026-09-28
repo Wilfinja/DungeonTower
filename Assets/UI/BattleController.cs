@@ -444,6 +444,21 @@ namespace DungeonTower.UI
             var unit = _battle.CurrentUnit;
             Debug.Log($"Round {_battle.RoundNumber} — {unit.DisplayName}'s turn ({unit.Faction})");
             unit.TickCooldowns();
+            var startTick = unit.Status.OnTurnStart();
+            foreach (var line in startTick.Log) Debug.Log(line);
+            _unitViews[unit].Refresh();
+            if (startTick.OwnerDied)
+            {
+                HandleDeath(unit);
+                EndTurn();
+                return;
+            }
+            if (startTick.SkipTurn)
+            {
+                Debug.Log($"{unit.DisplayName} is stunned and skips their turn.");
+                EndTurn();
+                return;
+            }
             RefreshTurnHighlight();
             if (_turnTracker != null)
                 _turnTracker.Refresh(_battle.GetProjectedTurnOrder(IsTrackable, TurnTrackerMinEntries),
@@ -630,11 +645,13 @@ namespace DungeonTower.UI
                 case EffectKind.Buff:
                     unit.Stats.AddBonus(ability.Bonus);
                     break;
+                case EffectKind.Status:
+                    break;
                 default:
                     Debug.LogWarning($"{potion.Name}'s ability is {ability.EffectKind}-kind, which isn't meaningful for a self-used potion — nothing happened.");
                     break;
             }
-
+            ApplyAbilityStatuses(unit, unit, ability);
             _unitViews[unit].Refresh();
             Debug.Log($"{unit.DisplayName} uses {potion.Name}.");
         }
@@ -1071,7 +1088,47 @@ namespace DungeonTower.UI
                     target.Stats.AddBonus(ability.Bonus);
                     Debug.Log($"{attacker.DisplayName} uses {ability.Name} on {target.DisplayName}, granting a bonus.");
                     break;
+
+                case EffectKind.Status:
+                    // No primary effect — the ability's Statuses are the whole payload.
+                    break;
             }
+
+            ApplyAbilityStatuses(attacker, target, ability);   // <-- new, after the switch's closing brace
+        }
+
+        // Applies the ability's Statuses to one target: the whole payload for
+        // EffectKind.Status, on-hit procs for every other kind. Skipped if the
+        // target is already dead (a Damage hit may have just killed it).
+        private void ApplyAbilityStatuses(CombatUnit source, CombatUnit target, IAbility ability)
+        {
+            var statuses = ability.Statuses;
+            if (statuses == null || statuses.Count == 0 || !target.IsAlive) return;
+
+            foreach (var app in statuses)
+            {
+                var rule = StatusRules.Get(app.Id);
+                var result = target.Status.Apply(app, source, _rng);
+
+                // A hostile status counts as an attack even if it fails to land.
+                if (rule.Polarity == StatusPolarity.Harmful && target.Faction != source.Faction)
+                    AlertUnit(target);
+
+                switch (result.Outcome)
+                {
+                    case StatusApplyOutcome.Applied:
+                    case StatusApplyOutcome.Stacked:
+                    case StatusApplyOutcome.Refreshed:
+                        Debug.Log($"{target.DisplayName} is affected by {app.Id} ({result.Outcome}).");
+                        break;
+                    case StatusApplyOutcome.Resisted:
+                        Debug.Log($"{target.DisplayName} resists {app.Id}.");
+                        break;
+                        // ProcFailed: silent — an on-hit proc that didn't trigger isn't news.
+                }
+            }
+
+            _unitViews[target].Refresh();
         }
 
         private void ResolveAttack(CombatUnit attacker, CombatUnit defender, IAbility ability)
@@ -1355,6 +1412,19 @@ namespace DungeonTower.UI
 
         private void EndTurn()
         {
+            var ending = _battle.CurrentUnit;
+            if (ending != null)
+            {
+                bool wasAlive = ending.IsAlive;
+                var endTick = ending.Status.OnTurnEnd();
+                foreach (var line in endTick.Log) Debug.Log(line);
+                if (wasAlive && !ending.IsAlive)
+                {
+                    _unitViews[ending].Refresh();
+                    HandleDeath(ending);
+                }
+            }
+
             _battle.EndCurrentTurn();
             BeginTurn();
         }
