@@ -81,6 +81,14 @@ namespace DungeonTower.Core
             return true;
         }
 
+        // Takes the armor off (leaving the slot empty) and hands it back.
+        public IArmor UnequipArmor()
+        {
+            var previous = EquippedArmor;
+            EquippedArmor = null;
+            return previous;
+        }
+
         // Applied by a Buff-kind ability (a potion or buff scroll) —
         // stacks additively with whatever's already accumulated.
         public void AddBonus(DerivedStatBonus bonus) => _consumableBonus += bonus;

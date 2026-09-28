@@ -118,6 +118,7 @@ namespace DungeonTower.UI
             _lootWindow.ScrollTakeRequested += OnLootScrollTakeRequested;
             _lootWindow.TakeAllRequested += OnTakeAllLootRequested;
             _lootWindow.CloseRequested += OnLootWindowCloseRequested;
+            _inventoryPanel.MoveRequested += OnInventoryMoveRequested;
         }
 
         private void OnDestroy()
@@ -133,6 +134,7 @@ namespace DungeonTower.UI
                 _inventoryPanel.ArmorEquipRequested -= OnArmorEquipRequested;
                 _inventoryPanel.PotionUseRequested -= OnPotionUseRequested;
                 _inventoryPanel.ScrollUseRequested -= OnScrollUseRequested;
+                _inventoryPanel.MoveRequested -= OnInventoryMoveRequested;
             }
             if (_lootWindow != null)
             {
@@ -444,7 +446,8 @@ namespace DungeonTower.UI
             unit.TickCooldowns();
             RefreshTurnHighlight();
             if (_turnTracker != null)
-                _turnTracker.Refresh(_battle.GetTurnOrder(), _battle.CurrentUnit, IsInCombat());
+                _turnTracker.Refresh(_battle.GetProjectedTurnOrder(IsTrackable, TurnTrackerMinEntries),
+                    _battle.CurrentUnit, IsInCombat());
             RefreshDangerZoneMarkers();
             _gridView.ClearHighlights();
             _pendingScroll = null;
@@ -569,6 +572,7 @@ namespace DungeonTower.UI
             }
 
             _inventory.RemoveArmor(armor);
+            unit.ClampVitals();
             if (previous != null) _inventory.AddArmor(previous);
             Debug.Log($"{unit.DisplayName} equips {armor.Name}" + (previous != null ? $" (was {previous.Name})" : ""));
 
@@ -688,10 +692,25 @@ namespace DungeonTower.UI
             else
             {
                 _inventoryPanel.Refresh();
+                RefreshActionBar(_battle.CurrentUnit);
             }
         }
 
-        private bool IsInCombat() => _unitViews.Keys.Any(u => u.Faction == Faction.Enemy && u.IsAlerted);
+        private void RefreshActionBar(CombatUnit unit)
+        {
+            if (unit == null || unit.Faction != Faction.Player) return;
+
+            if (unit.EquippedWeapon != null) _abilityBar.Show(unit.EquippedWeapon, unit.GetRemainingCooldown);
+            else _abilityBar.ShowMoveOnly();
+
+            SetMode(ActionMode.Move);
+        }
+
+        private bool IsInCombat() => _unitViews.Keys.Any(u => u.Faction == Faction.Enemy && u.IsAlive && u.IsAlerted);
+
+        private const int TurnTrackerMinEntries = 5;
+        private static bool IsTrackable(CombatUnit u) =>
+            u.IsAlive && (u.Faction == Faction.Player || u.IsAlerted);
 
         // Valid target tiles for the given ability: a single-target
         // ability can only be clicked on a living, LINE-OF-SIGHT-visible
@@ -741,6 +760,42 @@ namespace DungeonTower.UI
                 .Where(u => u.IsAlive && u != exclude)
                 .Select(u => u.Position)
                 .ToList();
+        }
+
+        // A drag-and-drop from the inventory panel. amount is how many to move
+        // (int.MaxValue means "the whole stack" — TryMove clamps it). Shuffling
+        // the stash (or one belt's order) is always free. Anything that changes
+        // what a unit wears or carries follows the normal equip rule: free out
+        // of combat, costs the turn once an enemy is alerted — and in combat
+        // only the acting unit's own gear/belt can be touched.
+        private void OnInventoryMoveRequested(SlotRef from, SlotRef to, int amount)
+        {
+            if (_battle == null || _battle.Outcome != BattleOutcome.InProgress) return;
+            var current = _battle.CurrentUnit;
+            if (current.Faction != Faction.Player) return;
+
+            if (IsInCombat())
+            {
+                int currentIndex = _partyMembers.IndexOf(current);
+                if ((from.BelongsToUnit && from.Owner != currentIndex)
+                    || (to.BelongsToUnit && to.Owner != currentIndex))
+                {
+                    Debug.Log("Only the acting unit's gear can be changed during combat.");
+                    _inventoryPanel.Refresh();
+                    return;
+                }
+            }
+
+            var outcome = InventoryTransfer.TryMove(_inventory, _partyMembers, from, to, amount, out var reason);
+            if (outcome == MoveOutcome.Rejected)
+            {
+                if (reason != null) Debug.Log(reason);
+                _inventoryPanel.Refresh();
+                return;
+            }
+
+            if (outcome == MoveOutcome.LoadoutChanged) ResolveEquipCost();
+            else _inventoryPanel.Refresh();
         }
 
         private void Update()

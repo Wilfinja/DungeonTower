@@ -1,8 +1,25 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
 namespace DungeonTower.Combat
 {
+    /// <summary>
+    /// One entry in a turn-order forecast. RoundOffset 0 is the current
+    /// round, 1 is the next round, and so on.
+    /// </summary>
+    public readonly struct TurnSlot
+    {
+        public CombatUnit Unit { get; }
+        public int RoundOffset { get; }
+
+        public TurnSlot(CombatUnit unit, int roundOffset)
+        {
+            Unit = unit;
+            RoundOffset = roundOffset;
+        }
+    }
+
     /// <summary>
     /// Owns one fight from start to outcome: the roster, the initiative
     /// queue, and whose turn it currently is. Call EndCurrentTurn() after
@@ -59,11 +76,47 @@ namespace DungeonTower.Combat
             return BattleOutcome.InProgress;
         }
 
-        public IEnumerable<CombatUnit> GetTurnOrder()
+        /// <summary>
+        /// Forecast of upcoming turns, restricted to units `include`
+        /// accepts (the caller decides who's worth showing): the rest of
+        /// this round (current unit first), then the whole next round,
+        /// then further projected rounds until at least `minEntries`
+        /// slots exist. Later rounds are a projection — they assume the
+        /// same units are alive with the same Initiative as right now.
+        /// Enumerate it right away; it reads live queue state.
+        /// </summary>
+        public IEnumerable<TurnSlot> GetProjectedTurnOrder(Func<CombatUnit, bool> include, int minEntries)
         {
-            if (CurrentUnit != null) yield return CurrentUnit;
+            if (Outcome != BattleOutcome.InProgress) yield break;
+
+            int count = 0;
+
+            if (CurrentUnit != null && include(CurrentUnit))
+            {
+                yield return new TurnSlot(CurrentUnit, 0);
+                count++;
+            }
+
             foreach (var unit in _turnOrder.Remaining)
-                if (unit.IsAlive) yield return unit;
+            {
+                if (!unit.IsAlive || !include(unit)) continue;
+                yield return new TurnSlot(unit, 0);
+                count++;
+            }
+
+            var oneRound = TurnOrderQueue.InitiativeOrder(_units.Where(include)).ToList();
+            if (oneRound.Count == 0) yield break;
+
+            // Always the full next round, then more whole rounds only if
+            // that still leaves us short of minEntries.
+            for (int round = 1; round == 1 || count < minEntries; round++)
+            {
+                foreach (var unit in oneRound)
+                {
+                    yield return new TurnSlot(unit, round);
+                    count++;
+                }
+            }
         }
     }
 }

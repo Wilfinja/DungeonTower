@@ -120,6 +120,21 @@ namespace DungeonTower.Combat
             return true;
         }
 
+        public IWeapon UnequipWeapon()
+        {
+            var previous = EquippedWeapon;
+            EquippedWeapon = null;
+            return previous;
+        }
+
+        // Max HP/MP can drop when armor comes off or is swapped — keeps the
+        // current values from sitting above the new max.
+        public void ClampVitals()
+        {
+            if (CurrentHp > 0) CurrentHp = Math.Max(1, Math.Min(CurrentHp, Stats.MaxHp));
+            CurrentMp = Math.Min(CurrentMp, Stats.MaxMp);
+        }
+
         public void ApplyDamage(int amount)
         {
             CurrentHp = Math.Max(0, CurrentHp - Math.Max(0, amount));

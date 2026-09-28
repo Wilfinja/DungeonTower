@@ -18,17 +18,23 @@ namespace DungeonTower.Combat
         public int RoundNumber { get; private set; }
         public bool HasNext => _order.Count > 0;
 
+        // Single source of truth for initiative ordering: the round
+        // builder below and Battle's turn-order forecast both use it, so
+        // a preview can never disagree with the order a real round gets.
+        public static IEnumerable<CombatUnit> InitiativeOrder(IEnumerable<CombatUnit> units)
+        {
+            return units
+                .Where(u => u.IsAlive)
+                .OrderByDescending(u => u.Stats.Initiative)
+                .ThenBy(u => u.DisplayName); // stable tiebreak, avoids nondeterministic order
+        }
+
         public void StartNewRound(IEnumerable<CombatUnit> allUnits)
         {
             RoundNumber++;
             _order.Clear();
 
-            var living = allUnits
-                .Where(u => u.IsAlive)
-                .OrderByDescending(u => u.Stats.Initiative)
-                .ThenBy(u => u.DisplayName); // stable tiebreak, avoids nondeterministic order
-
-            foreach (var unit in living)
+            foreach (var unit in InitiativeOrder(allUnits))
                 _order.Enqueue(unit);
         }
 

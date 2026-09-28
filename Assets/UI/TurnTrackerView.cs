@@ -5,22 +5,26 @@ using DungeonTower.Combat;
 namespace DungeonTower.UI
 {
     /// <summary>
-    /// Row at the top of the screen showing this round's remaining turn
-    /// order, current unit first. Shows living party members and
-    /// alerted enemies only, and hides entirely outside of combat.
-    /// Purely a view — BattleController pushes state in via Refresh.
+    /// Row showing the upcoming turn order: the rest of this round
+    /// (current unit first), then the next round, dimmed, with an
+    /// optional divider between rounds. Purely a view — who's worth
+    /// showing is decided by whoever builds the forecast (see
+    /// Battle.GetProjectedTurnOrder), and BattleController pushes it in
+    /// via Refresh. Hides entirely outside of combat.
     /// </summary>
     public sealed class TurnTrackerView : MonoBehaviour
     {
         [SerializeField] private Transform _slotContainer;
         [SerializeField] private TurnTrackerSlotView _slotPrefab;
+        [SerializeField] private GameObject _roundDividerPrefab; // optional
+        [SerializeField, Min(1)] private int _maxSlots = 12;
 
-        private readonly List<TurnTrackerSlotView> _slots = new List<TurnTrackerSlotView>();
+        private readonly List<GameObject> _spawned = new List<GameObject>();
 
         // inCombat is passed in (rather than derived from `order`)
         // because an alerted enemy that already acted this round isn't
         // in the remaining order, but combat is still on.
-        public void Refresh(IEnumerable<CombatUnit> order, CombatUnit current, bool inCombat)
+        public void Refresh(IEnumerable<TurnSlot> order, CombatUnit current, bool inCombat)
         {
             if (!inCombat)
             {
@@ -31,14 +35,24 @@ namespace DungeonTower.UI
             gameObject.SetActive(true);
             Clear();
 
-            foreach (var unit in order)
+            int shown = 0;
+            int lastRound = -1;
+            foreach (var entry in order)
             {
-                if (!unit.IsAlive) continue;
-                if (unit.Faction == Faction.Enemy && !unit.IsAlerted) continue;
+                if (shown >= _maxSlots) break;
+
+                if (lastRound >= 0 && entry.RoundOffset != lastRound && _roundDividerPrefab != null)
+                    _spawned.Add(Instantiate(_roundDividerPrefab, _slotContainer));
+                lastRound = entry.RoundOffset;
+
+                // The same unit can appear more than once now (this
+                // round and next), so "current" means offset 0 only.
+                bool isCurrent = entry.RoundOffset == 0 && entry.Unit == current;
 
                 var slot = Instantiate(_slotPrefab, _slotContainer);
-                slot.Bind(unit, unit == current);
-                _slots.Add(slot);
+                slot.Bind(entry.Unit, isCurrent, entry.RoundOffset);
+                _spawned.Add(slot.gameObject);
+                shown++;
             }
         }
 
@@ -50,9 +64,9 @@ namespace DungeonTower.UI
 
         private void Clear()
         {
-            foreach (var slot in _slots)
-                if (slot != null) Destroy(slot.gameObject);
-            _slots.Clear();
+            foreach (var obj in _spawned)
+                if (obj != null) Destroy(obj);
+            _spawned.Clear();
         }
     }
 }
