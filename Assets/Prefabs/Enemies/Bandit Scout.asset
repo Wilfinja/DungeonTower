@@ -14,8 +14,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.EnemySO
   _displayName: Bandit Scout
   _role: 1
-  _classId: 0
+  _body: 4
+  _mind: 3
+  _spirit: 5
   _weapon: {fileID: 11400000, guid: 29ff215a918935545be78480ff777074, type: 2}
   _armor: {fileID: 11400000, guid: 31cdcfe4e9017bb45b8cc06fdadce139, type: 2}
   _detectionRadius: 4
   _alertRadius: 4
+  _targetingStrategy: 3
+  _targetingRange: 8
+  _supportTargetingStrategy: 3
+  _supportHealThreshold: 50

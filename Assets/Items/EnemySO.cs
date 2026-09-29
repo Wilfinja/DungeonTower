@@ -27,7 +27,9 @@ namespace DungeonTower.Items
     {
         [SerializeField] private string _displayName;
         [SerializeField] private EnemyRole _role;
-        [SerializeField] private ClassId _classId;
+        [SerializeField, Min(0)] private int _body = 5;
+        [SerializeField, Min(0)] private int _mind = 5;
+        [SerializeField, Min(0)] private int _spirit = 5;
         [SerializeField] private WeaponSO _weapon;
         [SerializeField] private ArmorSO _armor;
         [SerializeField, Min(1)] private int _detectionRadius = 5;
@@ -45,7 +47,7 @@ namespace DungeonTower.Items
 
         public string DisplayName => _displayName;
         public EnemyRole Role => _role;
-        public ClassId ClassId => _classId;
+        public StatBlock Stats => new StatBlock(_body, _mind, _spirit);
         public IWeapon Weapon => _weapon;
         public IArmor Armor => _armor;
         public int DetectionRadius => _detectionRadius;

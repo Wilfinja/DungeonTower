@@ -10,12 +10,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9b3c6b5e23a327447837fee5b5dbebb7, type: 3}
-  m_Name: Arcane Blast
+  m_Name: Ring of Fire
   m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.AbilitySO
-  _abilityName: Arcane Blast
+  _abilityName: Ring of Fire
   _effectKind: 0
   _kind: 1
-  _damageMultiplier: 1.1
+  _damageMultiplier: 1.25
   _healHp: 0
   _healMp: 0
   _bonus:
@@ -29,8 +29,24 @@ MonoBehaviour:
     MoveRange: 0
     StatusResist: 0
     CritChance: 0
-  _statuses: []
-  _silenceable: 1
+  _statuses:
+  - Id: 1
+    Chance: 0
+    Stacks: 0
+    Duration: 0
+    Magnitude: 10
+    StatBonus:
+      Hp: 0
+      Mp: 0
+      PhysicalAttack: 0
+      PhysicalDefense: 0
+      MagicAttack: 0
+      MagicDefense: 0
+      Initiative: 0
+      MoveRange: 0
+      StatusResist: 0
+      CritChance: 0
+  _silenceable: 0
   _cleanses: 
   _pushDistance: 0
   _swapWithCaster: 0
@@ -45,7 +61,7 @@ MonoBehaviour:
   _endsIfOwnerMoves: 0
   _summonBlocksMovement: 0
   _summonBlocksLineOfSight: 0
-  _range: 3
-  _areaShape: 1
-  _areaRadius: 1
-  _cooldownTurns: 3
+  _range: 1
+  _areaShape: 4
+  _areaRadius: 2
+  _cooldownTurns: 4

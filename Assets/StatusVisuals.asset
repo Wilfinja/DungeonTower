@@ -1,0 +1,93 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4cfbf648ee8f0f140848e5da7efd371b, type: 3}
+  m_Name: StatusVisuals
+  m_EditorClassIdentifier: DungeonTower.UI::DungeonTower.UI.StatusVisualsSO
+  _beneficialBorder: {r: 0.3, g: 0.85, b: 0.35, a: 1}
+  _harmfulBorder: {r: 0.9, g: 0.25, b: 0.25, a: 1}
+  _entries:
+  - Id: 0
+    Color: {r: 0.45, g: 0.8, b: 0.2, a: 1}
+    Sprite: {fileID: 0}
+    CountMode: 0
+  - Id: 1
+    Color: {r: 1, g: 0.55, b: 0.1, a: 1}
+    Sprite: {fileID: 0}
+    CountMode: 0
+  - Id: 2
+    Color: {r: 0.65, g: 0.05, b: 0.1, a: 1}
+    Sprite: {fileID: 0}
+    CountMode: 0
+  - Id: 3
+    Color: {r: 0.55, g: 0.95, b: 0.55, a: 1}
+    Sprite: {fileID: 0}
+    CountMode: 0
+  - Id: 4
+    Color: {r: 0.45, g: 0.15, b: 0.6, a: 1}
+    Sprite: {fileID: 0}
+    CountMode: 0
+  - Id: 5
+    Color: {r: 0.75, g: 0.65, b: 0.45, a: 1}
+    Sprite: {fileID: 0}
+    CountMode: 0
+  - Id: 6
+    Color: {r: 0.55, g: 0.35, b: 0.2, a: 1}
+    Sprite: {fileID: 0}
+    CountMode: 0
+  - Id: 7
+    Color: {r: 0.45, g: 0.55, b: 0.75, a: 1}
+    Sprite: {fileID: 0}
+    CountMode: 0
+  - Id: 8
+    Color: {r: 1, g: 0.9, b: 0.25, a: 1}
+    Sprite: {fileID: 0}
+    CountMode: 0
+  - Id: 9
+    Color: {r: 0.35, g: 0.55, b: 0.85, a: 1}
+    Sprite: {fileID: 0}
+    CountMode: 0
+  - Id: 10
+    Color: {r: 0.4, g: 0.3, b: 0.15, a: 1}
+    Sprite: {fileID: 0}
+    CountMode: 0
+  - Id: 11
+    Color: {r: 1, g: 1, b: 0.6, a: 1}
+    Sprite: {fileID: 0}
+    CountMode: 0
+  - Id: 12
+    Color: {r: 0.6, g: 0.6, b: 0.65, a: 1}
+    Sprite: {fileID: 0}
+    CountMode: 0
+  - Id: 13
+    Color: {r: 0.95, g: 0.35, b: 0.2, a: 1}
+    Sprite: {fileID: 0}
+    CountMode: 0
+  - Id: 14
+    Color: {r: 0.9, g: 0.2, b: 0.7, a: 1}
+    Sprite: {fileID: 0}
+    CountMode: 0
+  - Id: 15
+    Color: {r: 0.5, g: 0.6, b: 0.2, a: 1}
+    Sprite: {fileID: 0}
+    CountMode: 0
+  - Id: 16
+    Color: {r: 0.25, g: 0.9, b: 0.9, a: 1}
+    Sprite: {fileID: 0}
+    CountMode: 0
+  - Id: 17
+    Color: {r: 1, g: 0.6, b: 0.75, a: 1}
+    Sprite: {fileID: 0}
+    CountMode: 0
+  - Id: 18
+    Color: {r: 0.7, g: 0.85, b: 1, a: 1}
+    Sprite: {fileID: 0}
+    CountMode: 0

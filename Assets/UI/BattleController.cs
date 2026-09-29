@@ -277,18 +277,34 @@ namespace DungeonTower.UI
         private const int FloorsPerSizeBonus = 3;
         private const int MaxRolePickAttempts = 5;
 
+        // Interim until the hero creation screen exists: every hero starts
+        // identical (LevelUpRules.StartingStats) and spends their creation
+        // points here. Runs before TryEquip, so the spent points count
+        // toward weapon/armor requirements.
+        private static UnitStats NewHeroStats(int body, int mind, int spirit)
+        {
+            var stats = new UnitStats(LevelUpRules.StartingStats,
+                startingPoints: LevelUpRules.StartingPoints);
+
+            for (int i = 0; i < body; i++) stats.TrySpendPoint(PrimaryStat.Body);
+            for (int i = 0; i < mind; i++) stats.TrySpendPoint(PrimaryStat.Mind);
+            for (int i = 0; i < spirit; i++) stats.TrySpendPoint(PrimaryStat.Spirit);
+
+            return stats;
+        }
+
         private List<CombatUnit> BuildStartingRoster(GeneratedDungeon dungeon)
         {
             var playerSpawns = SpawnZones.PlayerSpawns(dungeon, 2);
 
             var warrior = new CombatUnit("Warrior", Faction.Player,
-                new UnitStats(ClassLibrary.Get(ClassId.Warrior)), playerSpawns[0], _playerVisionRadius);
+                NewHeroStats(body: 3, mind: 0, spirit: 0), playerSpawns[0], _playerVisionRadius);
             warrior.TryEquip(_warriorWeapon);
             warrior.Stats.TryEquipArmor(_warriorArmor);
             LoadBeltFromLists(warrior.Belt, _warriorStartingPotions, _warriorStartingScrolls);
 
             var adept = new CombatUnit("Adept", Faction.Player,
-                new UnitStats(ClassLibrary.Get(ClassId.Adept)), playerSpawns[1], _playerVisionRadius);
+                NewHeroStats(body: 0, mind: 3, spirit: 0), playerSpawns[1], _playerVisionRadius);
             adept.TryEquip(_adeptWeapon);
             adept.Stats.TryEquipArmor(_adeptArmor);
             LoadBeltFromLists(adept.Belt, _adeptStartingPotions, _adeptStartingScrolls);
@@ -384,7 +400,7 @@ namespace DungeonTower.UI
             if (enemySO.Role == EnemyRole.Boss) _bossesSpawnedThisFloor++;
 
             var unit = new CombatUnit(enemySO.DisplayName, Faction.Enemy,
-    new UnitStats(ClassLibrary.Get(enemySO.ClassId)), position,
+    new UnitStats(enemySO.Stats), position,
     enemySO.DetectionRadius, enemySO.AlertRadius,
     enemySO.TargetingStrategy, enemySO.TargetingRange,
     enemySO.SupportTargetingStrategy, enemySO.SupportHealThreshold);

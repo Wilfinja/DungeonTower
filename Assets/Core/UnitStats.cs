@@ -3,23 +3,23 @@ using System;
 namespace DungeonTower.Core
 {
     /// <summary>
-    /// Runtime stat state for one unit: its class, level, accumulated
-    /// Body/Mind/Spirit, equipped armor, and any Buff-kind ability
+    /// Runtime stat state for one unit: its level, Body/Mind/Spirit,
+    /// unspent stat points, equipped armor, and any Buff-kind ability
     /// bonuses picked up during the fight (potions, buff scrolls).
-    /// Growth accumulates as float internally so a small secondary-stat
-    /// growth per level doesn't round away to nothing — only the
-    /// exposed stat values round.
+    /// There are no classes: every hero starts from the same stats and
+    /// each level-up grants points (LevelUpRules.PointsPerLevel) that
+    /// the player spends on Body, Mind, or Spirit. Unspent points bank.
     ///
     /// Primary stats (Body/Mind/Spirit, and Current below) only ever grow
-    /// from leveling. Armor and buffs never touch them — they add a flat
-    /// bonus directly onto the derived stats instead, applied on top of
-    /// the formula result in each property below.
+    /// by spending points. Armor and buffs never touch them — they add a
+    /// flat bonus directly onto the derived stats instead, applied on top
+    /// of the formula result in each property below.
     /// </summary>
     public sealed class UnitStats
     {
-        private float _body;
-        private float _mind;
-        private float _spirit;
+        private int _body;
+        private int _mind;
+        private int _spirit;
 
         // Accumulated Buff-kind ability bonuses (potions, buff scrolls) —
         // permanent for the rest of this battle. There's no expiry/decay
@@ -29,13 +29,16 @@ namespace DungeonTower.Core
         private DerivedStatBonus _consumableBonus;
         private DerivedStatBonus _temporaryBonus;
 
-        public ClassDefinition Class { get; }
         public int Level { get; private set; }
+
+        // Points earned but not yet spent. Banks indefinitely.
+        public int UnspentPoints { get; private set; }
+
         public IArmor EquippedArmor { get; private set; }
 
-        public int Body => RoundToInt(_body);
-        public int Mind => RoundToInt(_mind);
-        public int Spirit => RoundToInt(_spirit);
+        public int Body => _body;
+        public int Mind => _mind;
+        public int Spirit => _spirit;
 
         public StatBlock Current => new StatBlock(Body, Mind, Spirit);
 
@@ -54,21 +57,39 @@ namespace DungeonTower.Core
         public float CritChance => Math.Max(0f, Math.Min(DerivedStatFormulas.CritCapWithGear,
             DerivedStatFormulas.CritChance(Current) + TotalBonus.CritChance));
 
-        public UnitStats(ClassDefinition classDefinition, int startingLevel = 1)
+        public UnitStats(StatBlock startingStats, int startingLevel = 1, int startingPoints = 0)
         {
-            Class = classDefinition ?? throw new ArgumentNullException(nameof(classDefinition));
             Level = startingLevel;
-            _body = classDefinition.BaseStats.Body;
-            _mind = classDefinition.BaseStats.Mind;
-            _spirit = classDefinition.BaseStats.Spirit;
+            _body = startingStats.Body;
+            _mind = startingStats.Mind;
+            _spirit = startingStats.Spirit;
+            UnspentPoints = Math.Max(0, startingPoints);
         }
 
+        // Leveling no longer changes stats directly — it grants points
+        // the player spends with TrySpendPoint.
         public void LevelUp()
         {
             Level++;
-            _body += Class.Growth.Body;
-            _mind += Class.Growth.Mind;
-            _spirit += Class.Growth.Spirit;
+            UnspentPoints += LevelUpRules.PointsPerLevel;
+        }
+
+        // Spends one banked point on the given stat. No respecs — a
+        // spent point is permanent.
+        public bool TrySpendPoint(PrimaryStat stat)
+        {
+            if (UnspentPoints <= 0) return false;
+
+            switch (stat)
+            {
+                case PrimaryStat.Body: _body++; break;
+                case PrimaryStat.Mind: _mind++; break;
+                case PrimaryStat.Spirit: _spirit++; break;
+                default: return false;
+            }
+
+            UnspentPoints--;
+            return true;
         }
 
         public bool TryEquipArmor(IArmor armor) => TryEquipArmor(armor, out _);
@@ -95,7 +116,5 @@ namespace DungeonTower.Core
         public void AddBonus(DerivedStatBonus bonus) => _consumableBonus += bonus;
 
         public void SetTemporaryBonus(DerivedStatBonus bonus) => _temporaryBonus = bonus;
-
-        private static int RoundToInt(float value) => (int)Math.Round(value, MidpointRounding.AwayFromZero);
     }
 }

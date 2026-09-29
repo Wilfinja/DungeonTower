@@ -11,6 +11,12 @@ namespace DungeonTower.UI
     /// world space to canvas space, and shows/hides the Slider (hidden
     /// at full health, when dead, or when fog-hidden).
     ///
+    /// The optional status row hangs below the bar and is independent of
+    /// the Slider's visibility — statuses show even at full HP. It is
+    /// hidden when the unit is dead or fog-hidden. That means the root
+    /// now follows the unit whenever it's alive, not only while the
+    /// Slider is showing.
+    ///
     /// The root object must stay active so LateUpdate keeps running —
     /// only the child Slider is toggled. Runs after CameraFollow (which
     /// defaults to order 0) so the bar doesn't lag a frame behind a
@@ -20,6 +26,7 @@ namespace DungeonTower.UI
     public sealed class HealthBarView : MonoBehaviour
     {
         [SerializeField] private Slider _slider;
+        [SerializeField] private StatusRowView _statusRow; // optional
         [SerializeField] private Vector3 _worldOffset = new Vector3(0f, 0.6f, 0f);
 
         private CombatUnit _unit;
@@ -49,13 +56,21 @@ namespace DungeonTower.UI
         {
             if (_unit == null) return;
 
+            bool alive = _unit.IsAlive;
             int max = _unit.Stats.MaxHp;
-            bool show = _unit.IsAlive && _fogVisible && max > 0 && _unit.CurrentHp < max;
-            _slider.gameObject.SetActive(show);
-            if (!show) return;
 
-            _slider.maxValue = max;
-            _slider.value = _unit.CurrentHp;
+            bool showBar = alive && _fogVisible && max > 0 && _unit.CurrentHp < max;
+            _slider.gameObject.SetActive(showBar);
+            if (showBar)
+            {
+                _slider.maxValue = max;
+                _slider.value = _unit.CurrentHp;
+            }
+
+            if (_statusRow != null)
+                _statusRow.Refresh(alive && _fogVisible ? _unit : null);
+
+            if (!alive) return;
 
             var world = GridToWorld.ToWorldPosition(_unit.Position) + _worldOffset;
             Vector2 screen = _worldCamera.WorldToScreenPoint(world);

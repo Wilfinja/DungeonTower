@@ -14,8 +14,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.EnemySO
   _displayName: Bandit Tank
   _role: 0
-  _classId: 0
+  _body: 6
+  _mind: 3
+  _spirit: 3
   _weapon: {fileID: 11400000, guid: 0949dd566ee437a4592b0562e91c7070, type: 2}
   _armor: {fileID: 11400000, guid: a0a08febff7ae974b9429d1c71521a6f, type: 2}
   _detectionRadius: 4
   _alertRadius: 3
+  _targetingStrategy: 5
+  _targetingRange: 8
+  _supportTargetingStrategy: 0
+  _supportHealThreshold: 50

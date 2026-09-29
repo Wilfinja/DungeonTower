@@ -29,6 +29,54 @@ MonoBehaviour:
     MoveRange: 0
     StatusResist: 0
     CritChance: 0
+  _statuses:
+  - Id: 13
+    Chance: 0.5
+    Stacks: 0
+    Duration: 2
+    Magnitude: 0
+    StatBonus:
+      Hp: 0
+      Mp: 0
+      PhysicalAttack: 0
+      PhysicalDefense: 0
+      MagicAttack: 0
+      MagicDefense: 0
+      Initiative: 0
+      MoveRange: 0
+      StatusResist: 0
+      CritChance: 0
+  - Id: 14
+    Chance: 0.5
+    Stacks: 0
+    Duration: 2
+    Magnitude: 0
+    StatBonus:
+      Hp: 0
+      Mp: 0
+      PhysicalAttack: 0
+      PhysicalDefense: 0
+      MagicAttack: 0
+      MagicDefense: 0
+      Initiative: 0
+      MoveRange: 0
+      StatusResist: 0
+      CritChance: 0
+  _silenceable: 0
+  _cleanses: 
+  _pushDistance: 0
+  _swapWithCaster: 0
+  _summonTriggerMode: 0
+  _auraRadius: 0
+  _summonAffectsAllies: 0
+  _summonIgnoreOwnerFaction: 1
+  _summonConsumedAfterTrigger: 1
+  _summonIsHidden: 0
+  _summonDuration: 0
+  _summonMaxHp: 0
+  _endsIfOwnerMoves: 0
+  _summonBlocksMovement: 0
+  _summonBlocksLineOfSight: 0
   _range: 1
   _areaShape: 3
   _areaRadius: 2
