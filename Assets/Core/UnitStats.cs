@@ -31,6 +31,12 @@ namespace DungeonTower.Core
 
         public int Level { get; private set; }
 
+        // XP earned toward the NEXT level (not lifetime total) — resets
+        // down by the level's cost each time a level is gained, carrying
+        // any overflow over.
+        public int Experience { get; private set; }
+        public int ExperienceToNextLevel => LevelUpRules.XpToNextLevel(Level);
+
         // Points earned but not yet spent. Banks indefinitely.
         public int UnspentPoints { get; private set; }
 
@@ -64,6 +70,25 @@ namespace DungeonTower.Core
             _mind = startingStats.Mind;
             _spirit = startingStats.Spirit;
             UnspentPoints = Math.Max(0, startingPoints);
+        }
+
+        // Adds XP and levels up as many times as it pays for (one big
+        // reward can be several levels). Returns how many levels were
+        // gained — 0 in the usual case. Each level banks
+        // LevelUpRules.PointsPerLevel unspent points via LevelUp().
+        public int AddExperience(int amount)
+        {
+            if (amount <= 0) return 0;
+
+            Experience += amount;
+            int levelsGained = 0;
+            while (Experience >= ExperienceToNextLevel)
+            {
+                Experience -= ExperienceToNextLevel;
+                LevelUp();
+                levelsGained++;
+            }
+            return levelsGained;
         }
 
         // Leveling no longer changes stats directly — it grants points

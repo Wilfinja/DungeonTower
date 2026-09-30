@@ -117,6 +117,10 @@ namespace DungeonTower.UI
         private IScroll _pendingScroll;
         private readonly PartyInventory _inventory = new PartyInventory();
         private readonly List<LootDrop> _lootOnGround = new List<LootDrop>();
+
+        // Which EnemySO each living enemy was spawned from — read once at
+        // death for its XP reward and drop table, then removed.
+        private readonly Dictionary<CombatUnit, EnemySO> _enemyKits = new Dictionary<CombatUnit, EnemySO>();
         private readonly Dictionary<GridPosition, GameObject> _lootMarkers = new Dictionary<GridPosition, GameObject>();
         private readonly Dictionary<GridPosition, GameObject> _dangerZoneMarkers = new Dictionary<GridPosition, GameObject>();
         private List<CombatUnit> _partyMembers;
@@ -406,6 +410,7 @@ namespace DungeonTower.UI
     enemySO.SupportTargetingStrategy, enemySO.SupportHealThreshold);
             unit.TryEquip(enemySO.Weapon);
             unit.Stats.TryEquipArmor(enemySO.Armor);
+            _enemyKits[unit] = enemySO;
             return unit;
         }
 
@@ -1821,14 +1826,16 @@ namespace DungeonTower.UI
             Debug.Log($"{attacker.DisplayName} uses {ability.Name} on {defender.DisplayName} for {outcome.HpLost} {ability.Kind}{(result.IsCrit ? " (CRIT)" : "")}");
             foreach (var line in outcome.Log) Debug.Log(line);
 
-            if (defenderWasAlive && !defender.IsAlive) HandleDeath(defender);
+            if (defenderWasAlive && !defender.IsAlive) HandleDeath(defender, attacker);
             if (attackerWasAlive && !attacker.IsAlive) HandleDeath(attacker);   // died to thorns
         }
 
         // No revive exists — a dead unit is gone for the rest of the run.
         // Whatever it had equipped drops onto its tile as loot, for either
         // side to reclaim.
-        private void HandleDeath(CombatUnit unit)
+        // `killer` is whoever landed the killing blow, or null when nobody
+        // did (a poison tick, a trap, ...) — it only matters for XP.
+        private void HandleDeath(CombatUnit unit, CombatUnit killer = null)
         {
             Debug.Log($"{unit.DisplayName} has fallen.");
 
@@ -1842,13 +1849,60 @@ namespace DungeonTower.UI
             var droppedArmor = unit.Stats.EquippedArmor != null && unit.Stats.EquippedArmor.DropsOnDeath
                 ? unit.Stats.EquippedArmor : null;
 
+            LootDrop pile = null;
             if (droppedWeapon != null || droppedArmor != null)
+                pile = new LootDrop(unit.Position, droppedWeapon, droppedArmor);
+
+            // Enemies only: roll their extra consumable drop and pay out
+            // their XP. (A dead hero has no entry in _enemyKits.)
+            if (_enemyKits.TryGetValue(unit, out var kit))
             {
-                _lootOnGround.Add(new LootDrop(unit.Position, droppedWeapon, droppedArmor));
+                _enemyKits.Remove(unit);
+
+                if (DropTable.TryRoll(kit.Drops, kit.DropChance, _rng, out var rolled))
+                {
+                    pile = pile ?? new LootDrop(unit.Position, null, null);
+                    if (rolled.Potion != null) pile.AddPotion(rolled.Potion, rolled.Count);
+                    else pile.AddScroll(rolled.Scroll, rolled.Count);
+                }
+
+                AwardExperience(unit, kit.XpReward, killer);
+            }
+
+            if (pile != null && !pile.IsEmpty)
+            {
+                _lootOnGround.Add(pile);
                 SpawnLootMarker(unit.Position);
             }
 
             RefreshFogOfWar();
+        }
+
+        // The killer earns the full reward; every other LIVING hero earns
+        // the party share (numbers live in LevelUpRules). No killer (a
+        // status or trap kill), or a killer who isn't a hero, means
+        // everyone alive just gets the share. Levels gained bank stat
+        // points — spending them is a UI job, so for now this just logs.
+        private void AwardExperience(CombatUnit dead, int xpReward, CombatUnit killer)
+        {
+            if (xpReward <= 0 || _partyMembers == null) return;
+
+            foreach (var hero in _partyMembers)
+            {
+                if (!hero.IsAlive) continue;
+
+                float multiplier = hero == killer
+                    ? LevelUpRules.KillerXpMultiplier
+                    : LevelUpRules.PartyShareXpMultiplier;
+                int amount = Mathf.Max(1, Mathf.RoundToInt(xpReward * multiplier));
+
+                int levelsGained = hero.Stats.AddExperience(amount);
+                Debug.Log($"{hero.DisplayName} gains {amount} XP for {dead.DisplayName} " +
+                          $"({hero.Stats.Experience}/{hero.Stats.ExperienceToNextLevel}).");
+                if (levelsGained > 0)
+                    Debug.Log($"{hero.DisplayName} reached level {hero.Stats.Level}! " +
+                              $"{hero.Stats.UnspentPoints} stat point(s) to spend.");
+            }
         }
 
         // Every living, un-alerted enemy's detection radius, shown as a

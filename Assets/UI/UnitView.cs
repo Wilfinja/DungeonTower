@@ -30,6 +30,11 @@ namespace DungeonTower.UI
             _unit = unit;
             _glyph.text = symbol.ToString();
             _glyph.color = unit.Faction == Faction.Player ? _playerColor : _enemyColor;
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            UnitDebugInspector.Attach(this, unit);
+#endif
+
             Refresh();
         }
 
