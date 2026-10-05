@@ -36,6 +36,19 @@ namespace DungeonTower.Items
         [Min(0f), Tooltip("Pause after impact so the effect is seen before the turn moves on.")]
         public float ImpactHoldSeconds = 0.35f;
 
+        [Header("Hit feedback (all optional) - the 'crunch'")]
+        [Tooltip("One is picked at random per use, with a little pitch variation. Leave empty for silence.")]
+        public AudioClip[] HitSounds;
+        [Range(0f, 1f)] public float HitVolume = 0.8f;
+        [Min(0f), Tooltip("Freeze on impact, in seconds. Crits and kills get double. ~0.05 light, ~0.1 heavy, 0 = off.")]
+        public float HitStopSeconds = 0.06f;
+        [Min(0f), Tooltip("Camera shake strength in tiles. ~0.05 light, ~0.15 heavy, 0 = off.")]
+        public float ShakeStrengthTiles = 0.06f;
+        [Min(0.05f), Tooltip("How long the shake lasts, in seconds.")]
+        public float ShakeSeconds = 0.18f;
+        [Min(0f), Tooltip("How far a hit unit is knocked back before springing home, in tiles.")]
+        public float RecoilTiles = 0.2f;
+
         [Header("Lingering (Summon abilities)")]
         [Tooltip("Shown on every tile of a summoned object until it expires. Hidden traps stay hidden.")]
         public GameObject HazardEffectPrefab;

@@ -29,6 +29,17 @@ namespace DungeonTower.UI
         [SerializeField] private StatusRowView _statusRow; // optional
         [SerializeField] private Vector3 _worldOffset = new Vector3(0f, 0.6f, 0f);
 
+        [Header("Damage chip (optional)")]
+        [Tooltip("A second Slider placed BEHIND the main one with a pale fill. It lingers, then drains down to the real HP.")]
+        [SerializeField] private Slider _chipSlider;
+        [SerializeField, Min(0f)] private float _chipDelay = 0.35f;
+        [SerializeField, Min(0.05f), Tooltip("Seconds for the chip to drain a full bar's worth.")]
+        private float _chipSecondsToEmpty = 1.2f;
+
+        private float _chipValue;
+        private float _chipTimer;
+        private int _lastHp;
+
         private CombatUnit _unit;
         private Camera _worldCamera;
         private Canvas _canvas;
@@ -45,7 +56,28 @@ namespace DungeonTower.UI
             _parentRect = (RectTransform)transform.parent;
             _canvas = GetComponentInParent<Canvas>().rootCanvas;
             _worldCamera = Camera.main;
+            _lastHp = unit.CurrentHp;
+            _chipValue = _lastHp;
             UpdateBar();
+        }
+
+        // Uses scaled time, so a hit stop freezes the chip too.
+        private void UpdateChip(int hp, int max, bool showBar)
+        {
+            if (hp < _lastHp) _chipTimer = _chipDelay;
+            _lastHp = hp;
+
+            if (hp >= _chipValue) _chipValue = hp;                       // heals and full HP: no chip
+            else if (_chipTimer > 0f) _chipTimer -= Time.deltaTime;      // hold, then drain
+            else _chipValue = Mathf.MoveTowards(_chipValue, hp, max / _chipSecondsToEmpty * Time.deltaTime);
+
+            if (_chipSlider == null) return;
+            _chipSlider.gameObject.SetActive(showBar);
+            if (showBar)
+            {
+                _chipSlider.maxValue = max;
+                _chipSlider.value = _chipValue;
+            }
         }
 
         // Defaults to true, so a scene that never calls this behaves
@@ -68,6 +100,8 @@ namespace DungeonTower.UI
                 _slider.maxValue = max;
                 _slider.value = _unit.CurrentHp;
             }
+
+            UpdateChip(_unit.CurrentHp, max, showBar);
 
             if (_statusRow != null)
                 _statusRow.Refresh(alive && _fogVisible ? _unit : null);

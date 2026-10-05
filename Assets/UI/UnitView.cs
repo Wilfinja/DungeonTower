@@ -34,10 +34,15 @@ namespace DungeonTower.UI
 
         private CombatUnit _unit;
         private bool _attacking;
+        private int _reactingCount;
+        private Color _baseColor = Color.white;
         private bool _fogVisible = true;
         private readonly Queue<Vector3> _waypoints = new Queue<Vector3>();
 
         public bool IsMoving => _waypoints.Count > 0;
+
+        // Exposed so floating text / death pops can match this unit's font.
+        public TextMeshPro Glyph => _glyph;
 
         // Slides toward one tile. No-op while hidden in fog; the arrival
         // Refresh() places it instead.
@@ -85,6 +90,35 @@ namespace DungeonTower.UI
             _attacking = false;
         }
 
+        // Hit reaction: the glyph flashes `flash`, is knocked back along
+        // awayDirection, then springs home. Uses scaled time on purpose, so
+        // a hit stop (timeScale 0) freezes it mid-flash. A dead unit's view
+        // is already hidden by Refresh(), so deaths use HitFeedback's pop.
+        public IEnumerator PlayHitReaction(Vector3 awayDirection, float recoilTiles, Color flash, float flashSeconds)
+        {
+            if (_unit == null || !gameObject.activeInHierarchy) yield break;
+
+            _reactingCount++;
+            var home = GridToWorld.ToWorldPosition(_unit.Position);
+            var offset = awayDirection.sqrMagnitude > 0.0001f
+                ? awayDirection.normalized * TileWorldSize() * recoilTiles
+                : Vector3.zero;
+
+            const float outSeconds = 0.05f;
+            const float backSeconds = 0.16f;
+            for (float t = 0f; t < outSeconds + backSeconds; t += Time.deltaTime)
+            {
+                float k = t < outSeconds ? t / outSeconds : 1f - Mathf.SmoothStep(0f, 1f, (t - outSeconds) / backSeconds);
+                if (!IsMoving) transform.position = home + offset * k;
+                if (_glyph != null) _glyph.color = t < flashSeconds ? flash : _baseColor;
+                yield return null;
+            }
+
+            if (_glyph != null) _glyph.color = _baseColor;
+            _reactingCount = Mathf.Max(0, _reactingCount - 1);
+            Refresh();   // snaps home once nothing else is animating it
+        }
+
         private IEnumerator Slide(Vector3 from, Vector3 to, float seconds, bool smooth)
         {
             for (float t = 0f; t < seconds; t += Time.deltaTime)
@@ -100,6 +134,8 @@ namespace DungeonTower.UI
         private void OnDisable()
         {
             _attacking = false;
+            _reactingCount = 0;
+            if (_glyph != null) _glyph.color = _baseColor;
             _waypoints.Clear();
             if (_unit != null) transform.position = GridToWorld.ToWorldPosition(_unit.Position);
         }
@@ -109,6 +145,7 @@ namespace DungeonTower.UI
             _unit = unit;
             _glyph.text = symbol.ToString();
             _glyph.color = unit.Faction == Faction.Player ? _playerColor : _enemyColor;
+            _baseColor = _glyph.color;
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             UnitDebugInspector.Attach(this, unit);
@@ -120,7 +157,7 @@ namespace DungeonTower.UI
         public void Refresh()
         {
             if (_unit == null) return;
-            if (!IsMoving && !_attacking) transform.position = GridToWorld.ToWorldPosition(_unit.Position);
+            if (!IsMoving && !_attacking && _reactingCount == 0) transform.position = GridToWorld.ToWorldPosition(_unit.Position);
             ApplyVisibility();
         }
 

@@ -56,6 +56,8 @@ namespace DungeonTower.UI
         [SerializeField] private TurnTrackerView _turnTracker;
         [SerializeField] private GameObject _lootToggleButton;
         [SerializeField] private HealthBarView _healthBarPrefab;
+        // Optional. Plays hit stop, shake, numbers, and sound for each ability.
+        [SerializeField] private HitFeedback _hitFeedback;
         [SerializeField] private RectTransform _healthBarContainer;
         [SerializeField] private List<Chest> _chests = new List<Chest>();
 
@@ -143,6 +145,11 @@ namespace DungeonTower.UI
         private readonly Dictionary<BattlefieldObject, List<GameObject>> _battlefieldViews = new Dictionary<BattlefieldObject, List<GameObject>>();
         private readonly FogOfWar _fog = new FogOfWar();
         private Battle _battle;
+        // Hits landed by the ability currently resolving. Only filled between
+        // PerformAbility's ExecuteAbilityAt call and its feedback playback, so
+        // damage from other sources never leaks into the next ability's batch.
+        private readonly List<HitRecord> _hits = new List<HitRecord>();
+        private bool _recordingHits;
         private readonly Dictionary<CombatUnit, UnitView> _unitViews = new Dictionary<CombatUnit, UnitView>();
         private readonly Dictionary<CombatUnit, HealthBarView> _healthBars = new Dictionary<CombatUnit, HealthBarView>();
         private HashSet<GridPosition> _reachableTiles = new HashSet<GridPosition>();
@@ -1791,9 +1798,12 @@ namespace DungeonTower.UI
                     break;
 
                 case EffectKind.Heal:
+                    int hpBeforeHeal = target.CurrentHp;
                     target.Heal(ability.HealHp);
                     target.RestoreMp(ability.HealMp);
                     _unitViews[target].Refresh();
+                    if (_recordingHits)
+                        _hits.Add(HitRecord.Heal(_unitViews[target], target.Position, target.CurrentHp - hpBeforeHeal));
                     Debug.Log($"{attacker.DisplayName} uses {ability.Name} on {target.DisplayName}, restoring {ability.HealHp} HP / {ability.HealMp} MP.");
                     break;
 
@@ -2131,6 +2141,16 @@ namespace DungeonTower.UI
             AlertUnit(defender);
             _unitViews[defender].Refresh();
             _unitViews[attacker].Refresh();
+
+            if (_recordingHits)
+            {
+                _hits.Add(HitRecord.Damage(_unitViews[defender], defender.Position, outcome.HpLost,
+                    outcome.Absorbed, result.IsCrit, defenderWasAlive && !defender.IsAlive));
+                if (outcome.Reflected > 0)
+                    _hits.Add(HitRecord.Damage(_unitViews[attacker], attacker.Position, outcome.Reflected,
+                        0, false, attackerWasAlive && !attacker.IsAlive));
+            }
+
             Debug.Log($"{attacker.DisplayName} uses {ability.Name} on {defender.DisplayName} for {outcome.HpLost} {ability.Kind}{(result.IsCrit ? " (CRIT)" : "")}");
             foreach (var line in outcome.Log) Debug.Log(line);
 
@@ -2533,7 +2553,20 @@ namespace DungeonTower.UI
                     yield return FlyProjectile(visuals, from, to);
             }
 
+            _hits.Clear();
+            _recordingHits = true;
             ExecuteAbilityAt(attacker, ability, impactTile);   // damage / heal / summon lands here
+            _recordingHits = false;
+
+            // Hit stop, shake, numbers, sound: once per ability, however many targets it hit.
+            if (show && _hitFeedback != null && _hits.Count > 0)
+            {
+                _hits.RemoveAll(h => !_fog.IsCurrentlyVisible(h.Tile));
+                var landed = _hits.ToArray();
+                _hits.Clear();
+                if (landed.Length > 0)
+                    yield return _hitFeedback.Play(visuals, landed, GridToWorld.ToWorldPosition(attacker.Position));
+            }
 
             if (show && (visuals.ImpactEffectPrefab != null || visuals.AreaEffectPrefab != null))
                 yield return new WaitForSeconds(visuals.ImpactHoldSeconds);
