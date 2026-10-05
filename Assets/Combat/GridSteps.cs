@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using DungeonTower.Core;
 
@@ -93,17 +94,50 @@ namespace DungeonTower.Combat
     }
 
     /// <summary>
-    /// Attack/targeting range counts diagonals as one tile away, so a
-    /// range-R reach is a square, not a Manhattan diamond.
+    /// Ability and targeting range uses the SAME costs as movement: a
+    /// straight tile costs 1, a diagonal 1.5, and a range of R reaches
+    /// anything whose cost is at most R. (Distances are in half-steps —
+    /// see GridSteps — so a diagonal is 3 and Range R is a limit of R * 2.)
+    ///
+    /// Unlike walking there is no corner rule here: whether a wall is
+    /// in the way is LineOfSight's job, as it always was.
     /// </summary>
     public static class GridRange
     {
-        public static List<GridPosition> Square(GridPosition center, int radius)
+        // Range 1 can't reach a diagonal neighbor (1.5 > 1), exactly like
+        // Move Range 1 can't step diagonally. Flip this to true to let
+        // every adjacent tile, diagonals included, always count as in
+        // range for melee-style abilities.
+        public static bool DiagonalNeighborsAlwaysInRange = false;
+
+        public static int StepDistance(this GridPosition from, GridPosition to)
+        {
+            int dx = Math.Abs(from.X - to.X);
+            int dy = Math.Abs(from.Y - to.Y);
+            int diagonals = Math.Min(dx, dy);
+            int straights = Math.Max(dx, dy) - diagonals;
+            return diagonals * GridSteps.DiagonalCost + straights * GridSteps.StraightCost;
+        }
+
+        public static bool IsWithinRange(this GridPosition from, GridPosition to, int range)
+        {
+            if (DiagonalNeighborsAlwaysInRange && range >= 1
+                && Math.Max(Math.Abs(from.X - to.X), Math.Abs(from.Y - to.Y)) <= 1)
+                return true;
+
+            return from.StepDistance(to) <= range * GridSteps.StraightCost;
+        }
+
+        // Every tile within `radius` of `center` (an octagon), center included.
+        public static List<GridPosition> Within(GridPosition center, int radius)
         {
             var tiles = new List<GridPosition>();
             for (int dx = -radius; dx <= radius; dx++)
                 for (int dy = -radius; dy <= radius; dy++)
-                    tiles.Add(new GridPosition(center.X + dx, center.Y + dy));
+                {
+                    var tile = new GridPosition(center.X + dx, center.Y + dy);
+                    if (center.IsWithinRange(tile, radius)) tiles.Add(tile);
+                }
             return tiles;
         }
     }

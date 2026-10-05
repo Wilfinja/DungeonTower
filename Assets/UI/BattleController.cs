@@ -1120,7 +1120,7 @@ namespace DungeonTower.UI
             if (ability.AreaShape == AttackShape.Single || ability.AreaShape == AttackShape.Chain)
                 return GetSingleTargetTiles(unit, ability);
 
-            return GridRange.Square(unit.Position, ability.Range)
+            return GridRange.Within(unit.Position, ability.Range)
                 .Where(InBounds)
                 .ToList();
         }
@@ -1132,7 +1132,7 @@ namespace DungeonTower.UI
         // wall, Blast/Ring/Cross for a cloud), exactly like a Damage
         // ability's footprint already works.
         private List<GridPosition> GetSummonTargetTiles(CombatUnit unit, IAbility ability)
-            => GridRange.Square(unit.Position, ability.Range)
+            => GridRange.Within(unit.Position, ability.Range)
                 .Where(pos => InBounds(pos) && _movementMap.IsWalkable(pos) && FindLivingUnitAt(pos) == null
                     && LineOfSight.HasClearPath(unit.Position, pos, _sightMap))
                 .ToList();
@@ -1146,7 +1146,7 @@ namespace DungeonTower.UI
             var tiles = _unitViews.Keys
                 .Where(u => u.IsAlive
                     && (targetAllies ? u.Faction == unit.Faction : u.Faction != unit.Faction)
-                    && u.Position.ChebyshevDistance(unit.Position) <= ability.Range
+                    && u.Position.IsWithinRange(unit.Position, ability.Range)
                     && LineOfSight.HasClearPath(unit.Position, u.Position, _sightMap))
                 .Select(u => u.Position)
                 .ToList();
@@ -1157,7 +1157,7 @@ namespace DungeonTower.UI
             if (ability.EffectKind == EffectKind.Damage)
                 tiles.AddRange(_battlefieldObjects.Active
                     .Where(o => o.MaxHp.HasValue
-                        && o.Tiles.Any(t => unit.Position.ChebyshevDistance(t) <= ability.Range
+                        && o.Tiles.Any(t => unit.Position.IsWithinRange(t, ability.Range)
                             && LineOfSight.HasClearPath(unit.Position, t, _sightMap)))
                     .SelectMany(o => o.Tiles));
 
@@ -1586,7 +1586,7 @@ namespace DungeonTower.UI
         {
             int range = ability?.Range ?? 1;
 
-            if (enemy.Position.ChebyshevDistance(believedPosition) <= range
+            if (enemy.Position.IsWithinRange(believedPosition, range)
                 && LineOfSight.HasClearPath(enemy.Position, believedPosition, _sightMap))
             {
                 if (ability != null)
@@ -1654,7 +1654,7 @@ namespace DungeonTower.UI
         {
             var hostiles = _unitViews.Keys
                 .Where(u => u.IsAlive && u.Faction != enemy.Faction
-                    && u.Position.ChebyshevDistance(enemy.Position) <= enemy.TargetingRange)
+                    && u.Position.IsWithinRange(enemy.Position, enemy.TargetingRange))
                 .ToList();
 
             return hostiles.Count > 0
@@ -1665,7 +1665,7 @@ namespace DungeonTower.UI
         private List<CombatUnit> AlliesWithinRange(CombatUnit enemy, int range)
     => _unitViews.Keys
         .Where(u => u.IsAlive && u != enemy && u.Faction == enemy.Faction
-            && u.Position.ChebyshevDistance(enemy.Position) <= range)
+            && u.Position.IsWithinRange(enemy.Position, range))
         .ToList();
 
         // Prefers a reachable tile that already has range AND line of
@@ -1683,7 +1683,7 @@ namespace DungeonTower.UI
             var distanceField = PathDistanceField.BuildFrom(believedPosition, _movementMap);
 
             var firingPosition = reachable
-                .Where(pos => pos.ChebyshevDistance(believedPosition) <= range
+                .Where(pos => pos.IsWithinRange(believedPosition, range)
                     && LineOfSight.HasClearPath(pos, believedPosition, _sightMap))
                 .OrderBy(pos => PathDistanceOrMax(distanceField, pos))
                 .Select(pos => (GridPosition?)pos)
@@ -1937,9 +1937,9 @@ namespace DungeonTower.UI
                 var next = _unitViews.Keys
                     .Where(u => u.IsAlive && !hit.Contains(u)
                         && (targetsAllies ? u.Faction == attacker.Faction : u.Faction != attacker.Faction)
-                        && u.Position.ChebyshevDistance(current.Position) <= ability.Range
+                        && u.Position.IsWithinRange(current.Position, ability.Range)
                         && LineOfSight.HasClearPath(current.Position, u.Position, _sightMap))
-                    .OrderBy(u => u.Position.ChebyshevDistance(current.Position))
+                    .OrderBy(u => u.Position.StepDistance(current.Position))
                     .FirstOrDefault();
 
                 if (next == null) break;
