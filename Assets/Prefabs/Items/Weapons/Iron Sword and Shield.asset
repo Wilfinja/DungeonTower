@@ -18,4 +18,5 @@ MonoBehaviour:
   _requiredStatValue: 5
   _abilities:
   - {fileID: 11400000, guid: 64cbc98af4b245b4495602a2103c1f04, type: 2}
+  - {fileID: 11400000, guid: 1d3039fdee10b04479dcf2aa981a5d38, type: 2}
   _dropsOnDeath: 1

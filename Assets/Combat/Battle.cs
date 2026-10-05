@@ -36,6 +36,13 @@ namespace DungeonTower.Combat
         public BattleOutcome Outcome { get; private set; } = BattleOutcome.InProgress;
         public int RoundNumber => _turnOrder.RoundNumber;
 
+        /// <summary>
+        /// When true (the default) the fight ends in PlayerVictory the moment
+        /// the last enemy dies. BattleController turns it off so a cleared
+        /// floor keeps running turns while the party walks to the exit.
+        /// </summary>
+        public bool EndOnEnemiesDefeated { get; set; } = true;
+
         public Battle(IEnumerable<CombatUnit> units)
         {
             _units = units.ToList();
@@ -72,8 +79,15 @@ namespace DungeonTower.Combat
             bool anyEnemyAlive = _units.Any(u => u.Faction == Faction.Enemy && u.IsAlive);
 
             if (!anyPlayerAlive) return BattleOutcome.PlayerDefeat;
-            if (!anyEnemyAlive) return BattleOutcome.PlayerVictory;
+            if (!anyEnemyAlive && EndOnEnemiesDefeated) return BattleOutcome.PlayerVictory;
             return BattleOutcome.InProgress;
+        }
+
+        public void ReevaluateOutcome()
+        {
+            if (Outcome != BattleOutcome.InProgress) return;
+            Outcome = EvaluateOutcome();
+            if (Outcome != BattleOutcome.InProgress) CurrentUnit = null;
         }
 
         /// <summary>

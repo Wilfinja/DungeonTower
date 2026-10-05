@@ -35,9 +35,11 @@ namespace DungeonTower.UI
         private RectTransform _rect;
         private RectTransform _parentRect;
         private bool _fogVisible = true;
+        private Transform _follow;
 
-        public void Bind(CombatUnit unit)
+        public void Bind(CombatUnit unit, Transform follow)
         {
+            _follow = follow;
             _unit = unit;
             _rect = (RectTransform)transform;
             _parentRect = (RectTransform)transform.parent;
@@ -72,7 +74,8 @@ namespace DungeonTower.UI
 
             if (!alive) return;
 
-            var world = GridToWorld.ToWorldPosition(_unit.Position) + _worldOffset;
+            var basePos = _follow != null ? _follow.position : GridToWorld.ToWorldPosition(_unit.Position);
+            var world = basePos + _worldOffset;
             Vector2 screen = _worldCamera.WorldToScreenPoint(world);
             Camera uiCamera = _canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : _canvas.worldCamera;
             if (RectTransformUtility.ScreenPointToLocalPointInRectangle(_parentRect, screen, uiCamera, out var local))

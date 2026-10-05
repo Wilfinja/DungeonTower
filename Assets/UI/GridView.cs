@@ -32,10 +32,16 @@ namespace DungeonTower.UI
                     var pos = new GridPosition(x, y);
                     var tile = Instantiate(_tilePrefab, transform);
                     tile.transform.position = GridToWorld.ToWorldPosition(pos);
-                    tile.Initialize(pos, map.GetTile(pos));
+                    tile.Initialize(pos, map.GetTile(pos), map.IsDoorOpen(pos));
                     _tiles[pos] = tile;
                 }
             }
+        }
+
+        public void SetDoorOpen(GridPosition position, bool open)
+        {
+            if (_tiles.TryGetValue(position, out var tile))
+                tile.SetDoorOpen(open);
         }
 
         // One TileView.SetFog call per tile, driven by the given

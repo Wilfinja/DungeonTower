@@ -148,6 +148,22 @@ namespace DungeonTower.Combat
             return previous;
         }
 
+        // Fills HP and MP to their current maximums. Call once after a unit's
+        // starting gear is equipped: the constructor sizes HP/MP from the
+        // bare stats, so armor with an HP/MP bonus would otherwise leave
+        // the unit short of its own max. NOT for mid-fight gear swaps —
+        // those should never heal (see ClampVitals).
+        public void RestoreToFull()
+        {
+            CurrentHp = Stats.MaxHp;
+            CurrentMp = Stats.MaxMp;
+        }
+
+        // True if the unit has the MP to use this ability. Only weapon and
+        // scroll abilities charge MP — callers never ask this for potions.
+        public bool CanAfford(IAbility ability)
+            => ability == null || ability.MpCost <= 0 || CurrentMp >= ability.MpCost;
+
         // Max HP/MP can drop when armor comes off or is swapped — keeps the
         // current values from sitting above the new max.
         public void ClampVitals()

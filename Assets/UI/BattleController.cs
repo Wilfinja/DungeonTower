@@ -3,10 +3,12 @@ using DungeonTower.Core;
 using DungeonTower.Generation;
 using DungeonTower.Items;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 namespace DungeonTower.UI
 {
@@ -37,6 +39,10 @@ namespace DungeonTower.UI
         [SerializeField] private AbilityBarView _abilityBar;
         [SerializeField] private InventoryPanelView _inventoryPanel;
         [SerializeField] private GameObject _inventoryToggleButton;
+        [SerializeField] private CharacterSheetView _characterSheet;
+        // Optional. A "!" (or similar) shown on the sheet's open button
+        // while any living hero has unspent stat points.
+        [SerializeField] private GameObject _levelUpBadge;
         [SerializeField] private ThemeRegistry _themeRegistry;
         [SerializeField] private GameObject _lootMarkerPrefab;
         [SerializeField] private GameObject _dangerZoneMarkerPrefab;
@@ -53,13 +59,46 @@ namespace DungeonTower.UI
         [SerializeField] private RectTransform _healthBarContainer;
         [SerializeField] private List<Chest> _chests = new List<Chest>();
 
-        // The player's starting kit — direct asset references, same
-        // reasoning as EnemySO: no ID to keep in sync, just drag the
-        // weapon/armor you want in here.
-        [SerializeField] private WeaponSO _warriorWeapon;
-        [SerializeField] private ArmorSO _warriorArmor;
-        [SerializeField] private WeaponSO _adeptWeapon;
-        [SerializeField] private ArmorSO _adeptArmor;
+        // One hero's starting setup: name, where their creation points
+        // go, gear, and belt. Direct asset references, same reasoning as
+        // EnemySO — no ID to keep in sync, just drag the asset in.
+        [Serializable]
+        public sealed class StartingHero
+        {
+            public string Name = "Hero";
+            [Tooltip("Creation points, spent on top of the 3/3/3 start. Total beyond LevelUpRules.StartingPoints is ignored.")]
+            [Min(0)] public int Body;
+            [Min(0)] public int Mind;
+            [Min(0)] public int Spirit;
+            public WeaponSO Weapon;
+            public ArmorSO Armor;
+            [Tooltip("Fills belt slots in order; repeat an asset to stack it (see LoadBeltFromLists).")]
+            public List<PotionSO> BeltPotions = new List<PotionSO>();
+            public List<ScrollSO> BeltScrolls = new List<ScrollSO>();
+
+            // The same data the creation screen produces, so the game builds
+            // heroes one way whether they came from creation or from here.
+            public HeroSetup ToSetup()
+            {
+                var setup = new HeroSetup { Name = Name, Body = Body, Mind = Mind, Spirit = Spirit, Weapon = Weapon, Armor = Armor };
+                foreach (var potion in BeltPotions) if (potion != null) setup.BeltPotions.Add(potion);
+                foreach (var scroll in BeltScrolls) if (scroll != null) setup.BeltScrolls.Add(scroll);
+                return setup;
+            }
+        }
+
+        // The party is always this many heroes.
+        private const int PartySize = 3;
+
+        // Who the three heroes are when the game scene is played on its own
+        // (no party came through the title scene's creation screen —
+        // see PartySetup). Element 0 is the first hero, and so on.
+        [SerializeField] private List<StartingHero> _defaultParty = new List<StartingHero>
+        {
+            new StartingHero { Name = "Warrior", Body = 3 },
+            new StartingHero { Name = "Adept", Mind = 3 },
+            new StartingHero { Name = "Scout", Spirit = 3 }
+        };
 
         // Spare starting inventory (unequipped) — lists rather than
         // fixed fields since this is naturally variable-length; to
@@ -70,20 +109,15 @@ namespace DungeonTower.UI
         [SerializeField] private List<PotionSO> _startingPotions = new List<PotionSO>();
         [SerializeField] private List<ScrollSO> _startingScrolls = new List<ScrollSO>();
 
-        // PLACEHOLDER pending a real belt-loading screen: what each
-        // hero's belt starts the game with, authored directly rather
-        // than assigned in-editor. Each list entry fills one belt slot
-        // in order (repeat an asset to give it more than one slot's
-        // worth — see LoadBeltFromLists); this is independent of the
-        // shared-stash lists above, not drawn from them, purely for
-        // testing until belt-loading exists.
-        [SerializeField] private List<PotionSO> _warriorStartingPotions = new List<PotionSO>();
-        [SerializeField] private List<ScrollSO> _warriorStartingScrolls = new List<ScrollSO>();
-        [SerializeField] private List<PotionSO> _adeptStartingPotions = new List<PotionSO>();
-        [SerializeField] private List<ScrollSO> _adeptStartingScrolls = new List<ScrollSO>();
+        // Every map-generation knob (size, rooms, corridors, doors, exit)
+        // lives in this one foldout — see MapGenSettings.
+        [SerializeField] private MapGenSettings _mapGen = new MapGenSettings();
 
-        [SerializeField] private int _mapWidth = 24;
-        [SerializeField] private int _mapHeight = 16;
+        // Exit / descending. The Descend button is shown on a player's turn
+        // once the party meets the exit rule below.
+        [SerializeField] private GameObject _descendButton;
+        [SerializeField] private bool _requireAllHeroesOnExit = true;
+        [SerializeField] private bool _requireClearedFloor = false;
 
         // How far a player unit can currently see, for fog of war.
         // Reuses the same DetectionRadius concept enemies already have —
@@ -115,8 +149,12 @@ namespace DungeonTower.UI
         private ActionMode _mode = ActionMode.Move;
         private int _selectedAbilityIndex;
         private IScroll _pendingScroll;
-        private readonly PartyInventory _inventory = new PartyInventory();
+        private PartyInventory _inventory = new PartyInventory();
         private readonly List<LootDrop> _lootOnGround = new List<LootDrop>();
+        [SerializeField] private GameObject _pathDotPrefab;
+
+        private readonly List<GameObject> _pathDots = new List<GameObject>();
+        private GridPosition? _pendingMoveTile;
 
         // Which EnemySO each living enemy was spawned from — read once at
         // death for its XP reward and drop table, then removed.
@@ -125,6 +163,14 @@ namespace DungeonTower.UI
         private readonly Dictionary<GridPosition, GameObject> _dangerZoneMarkers = new Dictionary<GridPosition, GameObject>();
         private List<CombatUnit> _partyMembers;
         public IReadOnlyList<CombatUnit> PartyMembers => _partyMembers;
+        private bool _endTurnPending;
+        private bool AnyUnitMoving() => _unitViews.Values.Any(v => v != null && v.IsMoving);
+        private readonly List<SwarmMove> _swarmMoves = new List<SwarmMove>();
+        private readonly List<(CombatUnit unit, IEnumerator run)> _swarmAttacks = new List<(CombatUnit, IEnumerator)>();
+        private readonly Dictionary<BattlefieldObject, GameObject> _hazardPrefabs = new Dictionary<BattlefieldObject, GameObject>();
+        private readonly List<CombatUnit> _swarmEnded = new List<CombatUnit>();
+        private readonly Dictionary<CombatUnit, GridPosition> _swarmReserved = new Dictionary<CombatUnit, GridPosition>();
+        private int _swarmRound;
 
         private void Awake()
         {
@@ -142,6 +188,7 @@ namespace DungeonTower.UI
             _lootWindow.TakeAllRequested += OnTakeAllLootRequested;
             _lootWindow.CloseRequested += OnLootWindowCloseRequested;
             _inventoryPanel.MoveRequested += OnInventoryMoveRequested;
+            if (_characterSheet != null) _characterSheet.SpendPointRequested += OnSpendPointRequested;
         }
 
         private void OnDestroy()
@@ -160,6 +207,7 @@ namespace DungeonTower.UI
                 _inventoryPanel.ScrollUseRequested -= OnScrollUseRequested;
                 _inventoryPanel.MoveRequested -= OnInventoryMoveRequested;
             }
+            if (_characterSheet != null) _characterSheet.SpendPointRequested -= OnSpendPointRequested;
             if (_lootWindow != null)
             {
                 _lootWindow.WeaponTakeRequested -= OnLootWeaponTakeRequested;
@@ -182,8 +230,30 @@ namespace DungeonTower.UI
             {
                 if (_mode != ActionMode.Move) SetMode(ActionMode.Move);
                 if (_lootWindow != null) _lootWindow.Hide();
+                if (_characterSheet != null) _characterSheet.Hide();
             }
             _inventoryPanel.Toggle();
+        }
+
+        // Same shape as ToggleInventoryPanel, for the character sheet's
+        // open button. Opens on whoever's turn it is (or the first hero
+        // during an enemy turn). Spending points is free at any time.
+        public void ToggleCharacterSheet()
+        {
+            if (_characterSheet == null || _partyMembers == null) return;
+
+            if (_characterSheet.IsOpen)
+            {
+                _characterSheet.Hide();
+                return;
+            }
+
+            if (_mode != ActionMode.Move) SetMode(ActionMode.Move);
+            if (_lootWindow != null) _lootWindow.Hide();
+            _inventoryPanel.Hide();
+
+            int index = _battle != null ? _partyMembers.IndexOf(_battle.CurrentUnit) : -1;
+            _characterSheet.Show(Mathf.Max(0, index));
         }
 
         // Same shape as ToggleInventoryPanel — lets a Loot button appear
@@ -203,32 +273,42 @@ namespace DungeonTower.UI
 
             if (_mode != ActionMode.Move) SetMode(ActionMode.Move);
             _inventoryPanel.Hide();
+            if (_characterSheet != null) _characterSheet.Hide();
             _lootWindow.Show(GetLootableContainersInRange(_battle.CurrentUnit));
         }
 
         private void Start()
         {
-            var dungeon = MapGenerator.GenerateProcedural(_mapWidth, _mapHeight);
+            bool continuing = RunState.IsActive;
+            if (continuing) _currentFloor = RunState.Floor;
+
+            var dungeon = MapGenerator.GenerateProcedural(_mapGen);
             _map = dungeon.Map;
             _battlefieldObjects = new BattlefieldObjectRegistry();
             _movementMap = new MovementMapView(_map, _battlefieldObjects);
             _sightMap = new SightMapView(_map, _battlefieldObjects);
-            Debug.Log($"Generated {dungeon.Rooms.Count} room(s)");
+            Debug.Log($"Floor {_currentFloor}: generated {dungeon.Rooms.Count} room(s)");
             _gridView.BuildFrom(_map);
 
-            SeedStartingInventory();
+            if (continuing) _inventory = RunState.Inventory;
+            else SeedStartingInventory();
             _inventoryPanel.Initialize(_inventory);
             _inventoryPanel.Hide();
 
-            var units = BuildStartingRoster(dungeon);
+            var units = continuing ? BuildNextFloorRoster(dungeon) : BuildStartingRoster(dungeon);
             _partyMembers = units.Where(u => u.Faction == Faction.Player).ToList();
-            _inventoryPanel.ConfigurePartyNames(_partyMembers[0].DisplayName, _partyMembers[1].DisplayName);
             _inventoryPanel.SetPartyMembers(_partyMembers);
+            if (_characterSheet != null)
+            {
+                _characterSheet.SetPartyMembers(_partyMembers);
+                _characterSheet.Hide();
+            }
+            RefreshLevelUpBadge();
 
             foreach (var unit in units)
                 SpawnUnitView(unit);
 
-            _battle = new Battle(units);
+            _battle = new Battle(units) { EndOnEnemiesDefeated = false };
             _battle.Start();
             RefreshFogOfWar();
             BeginTurn();
@@ -251,7 +331,7 @@ namespace DungeonTower.UI
         // fills one slot with a count of 2, rather than using two
         // slots). Potions fill slots first, then scrolls; anything past
         // the belt's slot count is silently dropped.
-        private static void LoadBeltFromLists(Belt belt, List<PotionSO> potions, List<ScrollSO> scrolls)
+        private static void LoadBeltFromLists(Belt belt, IEnumerable<IPotion> potions, IEnumerable<IScroll> scrolls)
         {
             int slot = 0;
             foreach (var group in potions.GroupBy(p => p))
@@ -297,26 +377,66 @@ namespace DungeonTower.UI
             return stats;
         }
 
+        // Floor 2 and beyond: the same hero objects (HP, XP, gear, belts,
+        // statuses all intact) moved to the new start room, plus a fresh
+        // set of enemies. Heroes who died on the last floor stay behind.
+        private List<CombatUnit> BuildNextFloorRoster(GeneratedDungeon dungeon)
+        {
+            var party = RunState.Party;
+            var spawns = SpawnZones.PlayerSpawns(dungeon, party.Count);
+            if (spawns.Count < party.Count)
+                Debug.LogError($"BattleController: only found {spawns.Count} start tile(s) for {party.Count} heroes — the first room is too small.");
+            for (int i = 0; i < party.Count && i < spawns.Count; i++)
+                party[i].Position = spawns[i];
+
+            var units = new List<CombatUnit>(party);
+            units.AddRange(BuildEnemyRoster(dungeon, spawns));
+            return units;
+        }
+
         private List<CombatUnit> BuildStartingRoster(GeneratedDungeon dungeon)
         {
-            var playerSpawns = SpawnZones.PlayerSpawns(dungeon, 2);
+            var playerSpawns = SpawnZones.PlayerSpawns(dungeon, PartySize);
+            if (playerSpawns.Count < PartySize)
+                Debug.LogError($"BattleController: only found {playerSpawns.Count} start tile(s) for a party of {PartySize} — the first room is too small.");
 
-            var warrior = new CombatUnit("Warrior", Faction.Player,
-                NewHeroStats(body: 3, mind: 0, spirit: 0), playerSpawns[0], _playerVisionRadius);
-            warrior.TryEquip(_warriorWeapon);
-            warrior.Stats.TryEquipArmor(_warriorArmor);
-            LoadBeltFromLists(warrior.Belt, _warriorStartingPotions, _warriorStartingScrolls);
+            // The party from the creation screen if we came through the title
+            // scene; otherwise the Default Party authored on this component.
+            IReadOnlyList<HeroSetup> party = PartySetup.HasParty
+                ? PartySetup.Heroes
+                : _defaultParty.Select(h => h != null ? h.ToSetup() : null).ToList();
 
-            var adept = new CombatUnit("Adept", Faction.Player,
-                NewHeroStats(body: 0, mind: 3, spirit: 0), playerSpawns[1], _playerVisionRadius);
-            adept.TryEquip(_adeptWeapon);
-            adept.Stats.TryEquipArmor(_adeptArmor);
-            LoadBeltFromLists(adept.Belt, _adeptStartingPotions, _adeptStartingScrolls);
+            var units = new List<CombatUnit>();
+            for (int i = 0; i < PartySize && i < playerSpawns.Count; i++)
+            {
+                var setup = i < party.Count ? party[i] : null;
+                if (setup == null)
+                {
+                    Debug.LogWarning($"BattleController: no hero setup for party slot {i + 1} — using a blank hero.");
+                    setup = new HeroSetup { Name = $"Hero {i + 1}", Body = 1, Mind = 1, Spirit = 1 };
+                }
+                units.Add(BuildHero(setup, playerSpawns[i]));
+            }
 
-            var units = new List<CombatUnit> { warrior, adept };
             units.AddRange(BuildEnemyRoster(dungeon, playerSpawns));
-
             return units;
+        }
+
+        // Points are spent BEFORE equipping (they count toward requirements),
+        // and HP/MP are filled AFTER (armor may add to the max).
+        private CombatUnit BuildHero(HeroSetup setup, GridPosition position)
+        {
+            var hero = new CombatUnit(setup.Name, Faction.Player,
+                NewHeroStats(setup.Body, setup.Mind, setup.Spirit), position, _playerVisionRadius);
+
+            if (setup.Weapon != null && !hero.TryEquip(setup.Weapon))
+                Debug.LogWarning($"{setup.Name} can't equip {setup.Weapon.Name} — stat requirement not met.");
+            if (setup.Armor != null && !hero.Stats.TryEquipArmor(setup.Armor))
+                Debug.LogWarning($"{setup.Name} can't equip {setup.Armor.Name} — stat requirement not met.");
+
+            hero.RestoreToFull();
+            LoadBeltFromLists(hero.Belt, setup.BeltPotions, setup.BeltScrolls);
+            return hero;
         }
 
         // Every room except the player's starting room (dungeon.Rooms
@@ -340,6 +460,7 @@ namespace DungeonTower.UI
 
             _bossesSpawnedThisFloor = 0;
             var exclude = new List<GridPosition>(playerSpawns);
+            exclude.AddRange(dungeon.ExitTiles);   // keep enemies off the stairs
 
             foreach (var room in dungeon.Rooms.Skip(1))
             {
@@ -410,6 +531,7 @@ namespace DungeonTower.UI
     enemySO.SupportTargetingStrategy, enemySO.SupportHealThreshold);
             unit.TryEquip(enemySO.Weapon);
             unit.Stats.TryEquipArmor(enemySO.Armor);
+            unit.RestoreToFull();   // armor may add HP/MP — start at the real max
             _enemyKits[unit] = enemySO;
             return unit;
         }
@@ -471,15 +593,26 @@ namespace DungeonTower.UI
             view.Bind(unit, symbol);
             _unitViews[unit] = view;
             var bar = Instantiate(_healthBarPrefab, _healthBarContainer);
-            bar.Bind(unit);
+            bar.Bind(unit, view.transform);
             _healthBars[unit] = bar;
         }
 
         private void BeginTurn()
         {
+            if (_swarmEnded.Count > 0)
+            {
+                var next = _battle.CurrentUnit;
+                if (next == null || next.Faction != Faction.Enemy || _battle.RoundNumber != _swarmRound)
+                {
+                    StartCoroutine(FlushSwarm());
+                    return;
+                }
+            }
             if (_battle.Outcome != BattleOutcome.InProgress)
             {
                 Debug.Log($"Battle over: {_battle.Outcome}");
+                if (_battle.Outcome == BattleOutcome.PlayerDefeat) RunState.Clear();
+                if (_descendButton != null) _descendButton.SetActive(false);
                 _abilityBar.Hide();
                 _inventoryPanel.Hide();
                 _inventoryToggleButton.SetActive(false);
@@ -527,9 +660,10 @@ namespace DungeonTower.UI
                 _inventoryToggleButton.SetActive(true);
                 _inventoryPanel.SetTargetMode(IsInCombat(), _partyMembers.IndexOf(unit), unit.Belt);
                 RefreshLootAvailability(unit);
+                RefreshDescendAvailability();
 
                 if (unit.EquippedWeapon != null) _abilityBar.Show(unit.EquippedWeapon, unit.GetRemainingCooldown,
-    a => SilenceRules.IsBlocked(unit, a, AbilitySource.Weapon));
+    a => SilenceRules.IsBlocked(unit, a, AbilitySource.Weapon) || !unit.CanAfford(a));
                 else _abilityBar.ShowMoveOnly();
 
                 SetMode(ActionMode.Move);
@@ -538,6 +672,7 @@ namespace DungeonTower.UI
             {
                 _inventoryToggleButton.SetActive(false);
                 if (_lootToggleButton != null) _lootToggleButton.SetActive(false);
+                if (_descendButton != null) _descendButton.SetActive(false);
                 _abilityBar.Hide();
                 RunEnemyTurn(unit);
             }
@@ -548,6 +683,7 @@ namespace DungeonTower.UI
         // clears any stale AoE preview.
         private void SetMode(ActionMode mode, int abilityIndex = 0)
         {
+            ClearPathPreview();
             _mode = mode;
             _gridView.ClearPreviewOverlay();
             var unit = _battle.CurrentUnit;
@@ -584,15 +720,24 @@ namespace DungeonTower.UI
 
         private void OnMoveSelected()
         {
+            if (_endTurnPending) return;
             if (_battle == null || _battle.Outcome != BattleOutcome.InProgress) return;
             if (_battle.CurrentUnit.Faction != Faction.Player) return;
             SetMode(ActionMode.Move);
+        }
+
+        private sealed class SwarmMove
+        {
+            public CombatUnit Unit;
+            public List<GridPosition> Path;
+            public bool Stopped;
         }
 
         // Ends the turn without moving or acting. Not a move, so it never arms
         // Momentum and never triggers Bleed.
         private void OnWaitSelected()
         {
+            if (_endTurnPending) return;
             if (_battle == null || _battle.Outcome != BattleOutcome.InProgress) return;
             var unit = _battle.CurrentUnit;
             if (unit.Faction != Faction.Player) return;
@@ -602,20 +747,63 @@ namespace DungeonTower.UI
             EndTurn();
         }
 
-        // Every move goes through here so on-move statuses fire on all paths:
-        // player clicks, enemy chasing, enemy roaming. (Momentum now, Bleed in Phase 3.)
+        private int _movesInProgress;
+
         private void MoveUnit(CombatUnit unit, GridPosition destination)
         {
-            unit.Position = destination;
-            var moveTick = unit.Status.OnMoved();
-            foreach (var line in moveTick.Log) Debug.Log(line);
-            _unitViews[unit].Refresh();
-            if (moveTick.OwnerDied) { HandleDeath(unit); return; }
+            var path = PathFinder.FindPath(unit.Position, destination, _movementMap, OccupiedTilesExcluding(unit));
+            if (unit.Faction == Faction.Enemy)
+            {
+                if (path.Count == 0) return;
+                _swarmMoves.Add(new SwarmMove { Unit = unit, Path = path });
+                _swarmReserved[unit] = path[path.Count - 1];
+                return;
+            }
+            StartCoroutine(WalkPath(unit, path));
+        }
 
-            foreach (var ended in _battlefieldObjects.RemoveOwnedByMovement(unit))
-                Debug.Log($"{unit.DisplayName}'s {ended.Name} fades as they move.");
+        private IEnumerator WalkPath(CombatUnit unit, List<GridPosition> path)
+        {
+            _movesInProgress++;
+            try
+            {
+                // Clear the blue move-range overlay as soon as the walk starts.
+                _gridView.SetHighlights(Enumerable.Empty<GridPosition>(), Enumerable.Empty<GridPosition>());
 
-            ResolveBattlefieldEntry(unit, destination);
+                // Once per move action (not per tile): Bleed damage, Momentum arming.
+                var moveTick = unit.Status.OnMoved();
+                foreach (var line in moveTick.Log) Debug.Log(line);
+                if (moveTick.OwnerDied)
+                {
+                    _unitViews[unit].Refresh();
+                    HandleDeath(unit);
+                    yield break;
+                }
+
+                foreach (var ended in _battlefieldObjects.RemoveOwnedByMovement(unit))
+                    Debug.Log($"{unit.DisplayName}'s {ended.Name} fades as they move.");
+
+                var view = _unitViews[unit];
+                var destination = path.Count > 0 ? path[path.Count - 1] : unit.Position;
+                foreach (var tile in path)
+                {
+                    view.StepTo(tile);
+                    while (view.IsMoving) yield return null;   // glyph arrives first...
+
+                    unit.Position = tile;                      // ...then the game state catches up
+                    view.Refresh();
+                    ResolveBattlefieldEntry(unit, tile);       // traps on THIS tile + fog refresh
+
+                    if (!unit.IsAlive) yield break;
+                    if (!unit.Status.CanMove)                  // a trap rooted/stunned them
+                    {
+                        if (!tile.Equals(destination))
+                            Debug.Log($"{unit.DisplayName} is stopped in their tracks.");
+                        break;
+                    }
+                }
+            }
+            finally { _movesInProgress--; }
         }
 
         // Fires any Trap/hazard sitting on the tile just entered. Called
@@ -623,6 +811,14 @@ namespace DungeonTower.UI
         // the push/pull/swap resolution below.
         private void ResolveBattlefieldEntry(CombatUnit unit, GridPosition position)
         {
+            // Stepping onto a closed door opens it for good. The fog refresh
+            // at the bottom of this method then reveals the far side.
+            if (_map.TryOpenDoor(position))
+            {
+                _gridView.SetDoorOpen(position, true);
+                Debug.Log("A door swings open.");
+            }
+
             foreach (var obj in _battlefieldObjects.TriggerOnEntry(unit, position))
             {
                 Debug.Log($"{unit.DisplayName} triggers {obj.Name}!");
@@ -638,8 +834,53 @@ namespace DungeonTower.UI
             RefreshFogOfWar();
         }
 
+        // ---------------- Exit / descending ----------------
+
+        private bool CanDescend()
+        {
+            if (_battle == null || _battle.Outcome != BattleOutcome.InProgress) return false;
+            if (_partyMembers == null) return false;
+
+            var living = _partyMembers.Where(u => u.IsAlive).ToList();
+            if (living.Count == 0) return false;
+
+            bool OnExit(CombatUnit u) => _map.GetTile(u.Position) == TileType.Exit;
+            bool reached = _requireAllHeroesOnExit ? living.All(OnExit) : living.Any(OnExit);
+            if (!reached) return false;
+
+            if (_requireClearedFloor
+                && _unitViews.Keys.Any(u => u.Faction == Faction.Enemy && u.IsAlive))
+                return false;
+
+            return true;
+        }
+
+        // Called at the start of every player turn. Moving ends a turn, so
+        // that's the only moment the answer can change for the player.
+        private void RefreshDescendAvailability()
+        {
+            if (_descendButton == null) return;
+            bool playerTurn = _battle != null && _battle.CurrentUnit != null
+                && _battle.CurrentUnit.Faction == Faction.Player;
+            _descendButton.SetActive(playerTurn && CanDescend());
+        }
+
+        // Hooked to the Descend button's OnClick. Reloads the scene (wiping
+        // every tile/unit view/fog layer in one go) with the party and
+        // inventory parked in RunState.
+        public void Descend()
+        {
+            if (_endTurnPending || AnyUnitMoving()) return;
+            if (!CanDescend()) return;
+
+            RunState.CarryToNextFloor(_currentFloor + 1, _partyMembers.Where(u => u.IsAlive), _inventory);
+            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        }
+
         private void OnAbilitySelected(int index)
         {
+            if (_endTurnPending) return;
+
             if (_battle == null || _battle.Outcome != BattleOutcome.InProgress) return;
             var unit = _battle.CurrentUnit;
             if (unit.Faction != Faction.Player || unit.EquippedWeapon == null) return;
@@ -655,6 +896,12 @@ namespace DungeonTower.UI
             if (SilenceRules.IsBlocked(unit, ability, AbilitySource.Weapon))
             {
                 Debug.Log($"{unit.DisplayName} is silenced and can't use {ability.Name}.");
+                return;
+            }
+
+            if (!unit.CanAfford(ability))
+            {
+                Debug.Log($"{unit.DisplayName} doesn't have enough MP for {ability.Name} ({ability.MpCost} needed, {unit.CurrentMp} left).");
                 return;
             }
 
@@ -798,6 +1045,11 @@ namespace DungeonTower.UI
                 Debug.Log($"{unit.DisplayName} is silenced and can't read {scroll.Name}.");
                 return;
             }
+            if (!unit.CanAfford(scroll.Ability))
+            {
+                Debug.Log($"{unit.DisplayName} doesn't have enough MP to read {scroll.Name} ({scroll.Ability.MpCost} needed, {unit.CurrentMp} left).");
+                return;
+            }
 
             _pendingScroll = scroll;
             _inventoryPanel.Hide();
@@ -839,7 +1091,7 @@ namespace DungeonTower.UI
             if (unit == null || unit.Faction != Faction.Player) return;
 
             if (unit.EquippedWeapon != null) _abilityBar.Show(unit.EquippedWeapon, unit.GetRemainingCooldown,
-    a => SilenceRules.IsBlocked(unit, a, AbilitySource.Weapon));
+    a => SilenceRules.IsBlocked(unit, a, AbilitySource.Weapon) || !unit.CanAfford(a));
             else _abilityBar.ShowMoveOnly();
 
             SetMode(ActionMode.Move);
@@ -868,7 +1120,7 @@ namespace DungeonTower.UI
             if (ability.AreaShape == AttackShape.Single || ability.AreaShape == AttackShape.Chain)
                 return GetSingleTargetTiles(unit, ability);
 
-            return AreaOfEffect.GetAffectedTiles(unit.Position, unit.Position, AttackShape.Blast, ability.Range)
+            return GridRange.Square(unit.Position, ability.Range)
                 .Where(InBounds)
                 .ToList();
         }
@@ -880,7 +1132,7 @@ namespace DungeonTower.UI
         // wall, Blast/Ring/Cross for a cloud), exactly like a Damage
         // ability's footprint already works.
         private List<GridPosition> GetSummonTargetTiles(CombatUnit unit, IAbility ability)
-            => AreaOfEffect.GetAffectedTiles(unit.Position, unit.Position, AttackShape.Blast, ability.Range)
+            => GridRange.Square(unit.Position, ability.Range)
                 .Where(pos => InBounds(pos) && _movementMap.IsWalkable(pos) && FindLivingUnitAt(pos) == null
                     && LineOfSight.HasClearPath(unit.Position, pos, _sightMap))
                 .ToList();
@@ -894,7 +1146,7 @@ namespace DungeonTower.UI
             var tiles = _unitViews.Keys
                 .Where(u => u.IsAlive
                     && (targetAllies ? u.Faction == unit.Faction : u.Faction != unit.Faction)
-                    && u.Position.ManhattanDistance(unit.Position) <= ability.Range
+                    && u.Position.ChebyshevDistance(unit.Position) <= ability.Range
                     && LineOfSight.HasClearPath(unit.Position, u.Position, _sightMap))
                 .Select(u => u.Position)
                 .ToList();
@@ -905,7 +1157,7 @@ namespace DungeonTower.UI
             if (ability.EffectKind == EffectKind.Damage)
                 tiles.AddRange(_battlefieldObjects.Active
                     .Where(o => o.MaxHp.HasValue
-                        && o.Tiles.Any(t => unit.Position.ManhattanDistance(t) <= ability.Range
+                        && o.Tiles.Any(t => unit.Position.ChebyshevDistance(t) <= ability.Range
                             && LineOfSight.HasClearPath(unit.Position, t, _sightMap)))
                     .SelectMany(o => o.Tiles));
 
@@ -933,7 +1185,7 @@ namespace DungeonTower.UI
         {
             return _unitViews.Keys
                 .Where(u => u.IsAlive && u != exclude)
-                .Select(u => u.Position)
+                .Select(u => _swarmReserved.TryGetValue(u, out var dest) ? dest : u.Position)
                 .ToList();
         }
 
@@ -945,6 +1197,8 @@ namespace DungeonTower.UI
         // only the acting unit's own gear/belt can be touched.
         private void OnInventoryMoveRequested(SlotRef from, SlotRef to, int amount)
         {
+            if (_endTurnPending) return;
+
             if (_battle == null || _battle.Outcome != BattleOutcome.InProgress) return;
             var current = _battle.CurrentUnit;
             if (current.Faction != Faction.Player) return;
@@ -975,6 +1229,8 @@ namespace DungeonTower.UI
 
         private void Update()
         {
+            if (_endTurnPending) return;
+
             if (_battle == null || _battle.Outcome != BattleOutcome.InProgress) return;
             if (_battle.CurrentUnit.Faction != Faction.Player) return;
 
@@ -997,15 +1253,13 @@ namespace DungeonTower.UI
         // mode already.
         private void HandleCancelInput()
         {
-            if (_mode == ActionMode.Move) return;
-
             bool rightClick = Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame;
             bool escape = Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame;
-            if (rightClick || escape)
-            {
-                _pendingScroll = null;
-                SetMode(ActionMode.Move);
-            }
+            if (!rightClick && !escape) return;
+
+            if (_mode == ActionMode.Move) { ClearPathPreview(); return; }
+            _pendingScroll = null;
+            SetMode(ActionMode.Move);
         }
 
         // Live AoE footprint preview: only relevant while aiming an
@@ -1078,11 +1332,43 @@ namespace DungeonTower.UI
             }
 
             var occupant = FindLivingUnitAt(target);
-            if (occupant == null && _reachableTiles.Contains(target))
+            if (occupant != null || !_reachableTiles.Contains(target))
             {
+                ClearPathPreview();   // clicked somewhere invalid: drop the preview
+                return;
+            }
+
+            if (_pendingMoveTile.HasValue && _pendingMoveTile.Value.Equals(target))
+            {
+                ClearPathPreview();   // second click on the same tile: go
                 MoveUnit(acting, target);
                 EndTurn();
+                return;
             }
+
+            ShowPathPreview(acting, target);   // first click (or a new tile): preview
+        }
+
+        private void ShowPathPreview(CombatUnit unit, GridPosition target)
+        {
+            ClearPathPreview();
+            _pendingMoveTile = target;
+            if (_pathDotPrefab == null) return;
+
+            var path = PathFinder.FindPath(unit.Position, target, _movementMap, OccupiedTilesExcluding(unit));
+            foreach (var tile in path)
+            {
+                var dot = Instantiate(_pathDotPrefab, transform);
+                dot.transform.position = GridToWorld.ToWorldPosition(tile);
+                _pathDots.Add(dot);
+            }
+        }
+
+        private void ClearPathPreview()
+        {
+            foreach (var dot in _pathDots) Destroy(dot);
+            _pathDots.Clear();
+            _pendingMoveTile = null;
         }
 
         private void HandleAbilityClick(CombatUnit acting, IAbility ability, GridPosition target, bool isScroll)
@@ -1090,10 +1376,14 @@ namespace DungeonTower.UI
             if (ability == null) return;
             if (!GetValidAbilityTargetTiles(acting, ability).Contains(target)) return;
 
-            ExecuteAbilityAt(acting, ability, target);
+            // Lock the aiming UI, spend the scroll, then play the attack out;
+            // EndTurn waits for the sequence the same way it waits for a walk.
+            _gridView.ClearHighlights();
+            _gridView.ClearPreviewOverlay();
             if (isScroll) acting.Belt.TryConsume(_pendingScroll);
             _pendingScroll = null;
 
+            StartCoroutine(TrackedAction(PerformAbility(acting, ability, target)));
             EndTurn();
         }
 
@@ -1296,10 +1586,11 @@ namespace DungeonTower.UI
         {
             int range = ability?.Range ?? 1;
 
-            if (enemy.Position.ManhattanDistance(believedPosition) <= range
+            if (enemy.Position.ChebyshevDistance(believedPosition) <= range
                 && LineOfSight.HasClearPath(enemy.Position, believedPosition, _sightMap))
             {
-                if (ability != null) ExecuteAbilityAt(enemy, ability, believedPosition);
+                if (ability != null)
+                    _swarmAttacks.Add((enemy, PerformAbility(enemy, ability, believedPosition)));
                 EndTurn();
                 return;
             }
@@ -1336,6 +1627,7 @@ namespace DungeonTower.UI
             {
                 if (enemy.IsOnCooldown(candidate)) continue;
                 if (SilenceRules.IsBlocked(enemy, candidate, AbilitySource.Weapon)) continue;
+                if (!enemy.CanAfford(candidate)) continue;
                 if (!AbilityTargeting.TargetsAllies(candidate)) continue;
 
                 var needy = allies.Where(a => SupportNeed.Needs(a, candidate, enemy.SupportHealThreshold)).ToList();
@@ -1362,7 +1654,7 @@ namespace DungeonTower.UI
         {
             var hostiles = _unitViews.Keys
                 .Where(u => u.IsAlive && u.Faction != enemy.Faction
-                    && u.Position.ManhattanDistance(enemy.Position) <= enemy.TargetingRange)
+                    && u.Position.ChebyshevDistance(enemy.Position) <= enemy.TargetingRange)
                 .ToList();
 
             return hostiles.Count > 0
@@ -1373,7 +1665,7 @@ namespace DungeonTower.UI
         private List<CombatUnit> AlliesWithinRange(CombatUnit enemy, int range)
     => _unitViews.Keys
         .Where(u => u.IsAlive && u != enemy && u.Faction == enemy.Faction
-            && u.Position.ManhattanDistance(enemy.Position) <= range)
+            && u.Position.ChebyshevDistance(enemy.Position) <= range)
         .ToList();
 
         // Prefers a reachable tile that already has range AND line of
@@ -1391,7 +1683,7 @@ namespace DungeonTower.UI
             var distanceField = PathDistanceField.BuildFrom(believedPosition, _movementMap);
 
             var firingPosition = reachable
-                .Where(pos => pos.ManhattanDistance(believedPosition) <= range
+                .Where(pos => pos.ChebyshevDistance(believedPosition) <= range
                     && LineOfSight.HasClearPath(pos, believedPosition, _sightMap))
                 .OrderBy(pos => PathDistanceOrMax(distanceField, pos))
                 .Select(pos => (GridPosition?)pos)
@@ -1430,9 +1722,11 @@ namespace DungeonTower.UI
         private void ExecuteAbilityAt(CombatUnit attacker, IAbility ability, GridPosition impactTile)
         {
             attacker.TriggerCooldown(ability);
+            attacker.SpendMp(ability.MpCost);   // weapon + scroll abilities only; potions resolve elsewhere
 
             if (ability.EffectKind == EffectKind.Summon)
             {
+                PlayAreaEffect(attacker, ability, impactTile);
                 SpawnBattlefieldObject(attacker, ability, impactTile);
                 return;
             }
@@ -1445,7 +1739,11 @@ namespace DungeonTower.UI
                 if (ability.EffectKind == EffectKind.Damage)
                 {
                     var obj = _battlefieldObjects.At(impactTile).FirstOrDefault(o => o.MaxHp.HasValue);
-                    if (obj != null) DamageBattlefieldObject(attacker, obj, ability);
+                    if (obj != null)
+                    {
+                        PlayImpactEffect(attacker, ability, impactTile);
+                        DamageBattlefieldObject(attacker, obj, ability);
+                    }
                 }
                 return;
             }
@@ -1458,6 +1756,8 @@ namespace DungeonTower.UI
 
             var affectedTiles = new HashSet<GridPosition>(
                 AreaOfEffect.GetAffectedTiles(attacker.Position, impactTile, ability.AreaShape, ability.AreaRadius));
+
+            PlayAreaEffect(attacker, ability, impactTile);
 
 
 
@@ -1482,6 +1782,8 @@ namespace DungeonTower.UI
         // here instead of needing their own resolver class.
         private void ApplyAbilityEffect(CombatUnit attacker, CombatUnit target, IAbility ability)
         {
+            PlayImpactEffect(attacker, ability, target.Position);
+
             switch (ability.EffectKind)
             {
                 case EffectKind.Damage:
@@ -1635,9 +1937,9 @@ namespace DungeonTower.UI
                 var next = _unitViews.Keys
                     .Where(u => u.IsAlive && !hit.Contains(u)
                         && (targetsAllies ? u.Faction == attacker.Faction : u.Faction != attacker.Faction)
-                        && u.Position.ManhattanDistance(current.Position) <= ability.Range
+                        && u.Position.ChebyshevDistance(current.Position) <= ability.Range
                         && LineOfSight.HasClearPath(current.Position, u.Position, _sightMap))
-                    .OrderBy(u => u.Position.ManhattanDistance(current.Position))
+                    .OrderBy(u => u.Position.ChebyshevDistance(current.Position))
                     .FirstOrDefault();
 
                 if (next == null) break;
@@ -1670,6 +1972,7 @@ namespace DungeonTower.UI
                 Statuses = ability.Statuses
             };
             _battlefieldObjects.Add(obj);
+            _hazardPrefabs[obj] = (ability as AbilitySO)?.Visuals?.HazardEffectPrefab;
             Debug.Log($"{caster.DisplayName} places {ability.Name}.");
             RefreshFogOfWar();
         }
@@ -1732,17 +2035,22 @@ namespace DungeonTower.UI
             {
                 foreach (var view in _battlefieldViews[obj]) Destroy(view);
                 _battlefieldViews.Remove(obj);
+                _hazardPrefabs.Remove(obj);
             }
-
-            if (_battlefieldObjectMarkerPrefab == null) return;
 
             foreach (var obj in _battlefieldObjects.Visible)
             {
                 if (_battlefieldViews.ContainsKey(obj)) continue;
+
+                // A per-ability hazard effect wins over the generic marker.
+                var prefab = _hazardPrefabs.TryGetValue(obj, out var hazard) && hazard != null
+                    ? hazard : _battlefieldObjectMarkerPrefab;
+                if (prefab == null) continue;
+
                 var views = new List<GameObject>();
                 foreach (var tile in obj.Tiles)
                 {
-                    var marker = Instantiate(_battlefieldObjectMarkerPrefab, transform);
+                    var marker = Instantiate(prefab, transform);
                     marker.transform.position = GridToWorld.ToWorldPosition(tile);
                     views.Add(marker);
                 }
@@ -1903,6 +2211,37 @@ namespace DungeonTower.UI
                     Debug.Log($"{hero.DisplayName} reached level {hero.Stats.Level}! " +
                               $"{hero.Stats.UnspentPoints} stat point(s) to spend.");
             }
+
+            RefreshLevelUpBadge();
+        }
+
+        // The character sheet's "+" button. Free at any time, in or out of
+        // combat. Raising max HP/MP also fills the new headroom, so a
+        // point spent never leaves a hero looking more wounded than before.
+        private void OnSpendPointRequested(int partyIndex, PrimaryStat stat)
+        {
+            if (_partyMembers == null || partyIndex < 0 || partyIndex >= _partyMembers.Count) return;
+
+            var unit = _partyMembers[partyIndex];
+            if (!unit.IsAlive) return;
+
+            int maxHpBefore = unit.Stats.MaxHp;
+            int maxMpBefore = unit.Stats.MaxMp;
+            if (!unit.Stats.TrySpendPoint(stat)) return;
+
+            unit.Heal(unit.Stats.MaxHp - maxHpBefore);
+            unit.RestoreMp(unit.Stats.MaxMp - maxMpBefore);
+
+            if (_unitViews.TryGetValue(unit, out var view)) view.Refresh();
+            _inventoryPanel.Refresh();   // equip requirements may now be met
+            if (_characterSheet != null) _characterSheet.Refresh();
+            RefreshLevelUpBadge();
+        }
+
+        private void RefreshLevelUpBadge()
+        {
+            if (_levelUpBadge == null || _partyMembers == null) return;
+            _levelUpBadge.SetActive(_partyMembers.Any(u => u.IsAlive && u.Stats.UnspentPoints > 0));
         }
 
         // Every living, un-alerted enemy's detection radius, shown as a
@@ -2148,29 +2487,254 @@ namespace DungeonTower.UI
             foreach (var candidate in weapon.Abilities)
                 if (!enemy.IsOnCooldown(candidate)
                     && !SilenceRules.IsBlocked(enemy, candidate, AbilitySource.Weapon)
+                    && enemy.CanAfford(candidate)
                     && !AbilityTargeting.TargetsAllies(candidate))
                     return candidate;
 
             return null;
         }
 
-        private void EndTurn()
+        // Counts as "an action in progress" so EndTurn waits for it, same
+        // as a walk (see EndTurn / _movesInProgress).
+        private IEnumerator TrackedAction(IEnumerator inner)
+        {
+            _movesInProgress++;
+            try { yield return StartCoroutine(inner); }
+            finally { _movesInProgress--; }
+        }
+
+        // One attack, start to finish: pull back -> snap -> projectile ->
+        // the ability's actual effect (damage/heal/summon) lands, with
+        // impact effects, at that moment. Unseen attacks (fogged attacker
+        // AND fogged target) skip the visuals and just resolve.
+        private IEnumerator PerformAbility(CombatUnit attacker, IAbility ability, GridPosition impactTile)
+        {
+            var visuals = (ability as AbilitySO)?.Visuals;
+            bool show = visuals != null && (attacker.Faction == Faction.Player
+                || _fog.IsCurrentlyVisible(attacker.Position) || _fog.IsCurrentlyVisible(impactTile));
+
+            if (show)
+            {
+                var from = GridToWorld.ToWorldPosition(attacker.Position);
+                var to = GridToWorld.ToWorldPosition(impactTile);
+
+                // The slash/pierce appears as the glyph snaps forward (or
+                // right away if this ability doesn't lunge).
+                Action slash = visuals.MeleeEffectPrefab != null
+                    ? () => PlayMeleeEffect(visuals, from, to)
+                    : (Action)null;
+
+                if (visuals.Lunge)
+                    yield return _unitViews[attacker].PlayAttack(to - from, visuals.WindUpSeconds, slash);
+                else
+                    slash?.Invoke();
+
+                if (visuals.ProjectilePrefab != null && !attacker.Position.Equals(impactTile))
+                    yield return FlyProjectile(visuals, from, to);
+            }
+
+            ExecuteAbilityAt(attacker, ability, impactTile);   // damage / heal / summon lands here
+
+            if (show && (visuals.ImpactEffectPrefab != null || visuals.AreaEffectPrefab != null))
+                yield return new WaitForSeconds(visuals.ImpactHoldSeconds);
+        }
+
+        private IEnumerator FlyProjectile(AbilityVisuals visuals, Vector3 from, Vector3 to)
+        {
+            var authored = visuals.ProjectilePrefab.transform.rotation;
+            var projectile = Instantiate(visuals.ProjectilePrefab, from, authored, transform);
+            var direction = to - from;
+            if (direction.sqrMagnitude > 0.0001f) projectile.transform.rotation = FacingRotation(direction) * authored;
+
+            float speed = visuals.ProjectileTilesPerSecond * UnitView.TileWorldSize();
+            while (projectile != null && projectile.transform.position != to)
+            {
+                projectile.transform.position = Vector3.MoveTowards(
+                    projectile.transform.position, to, speed * Time.deltaTime);
+                yield return null;
+            }
+            if (projectile == null) yield break;
+
+            foreach (var ps in projectile.GetComponentsInChildren<ParticleSystem>()) ps.Stop();   // let trails fade
+            Destroy(projectile, 1f);
+        }
+
+        // Rotates an effect authored facing RIGHT (+X) to point along `direction`.
+        private static Quaternion FacingRotation(Vector3 direction)
+            => Quaternion.Euler(0f, 0f, Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg);
+
+        private void SpawnEffect(GameObject prefab, GridPosition tile, float lifetime, Quaternion? rotation = null)
+        {
+            if (prefab == null || !_fog.IsCurrentlyVisible(tile)) return;   // unseen tiles stay unseen
+            SpawnEffectAt(prefab, GridToWorld.ToWorldPosition(tile), rotation ?? Quaternion.identity, lifetime);
+        }
+
+        private void SpawnEffectAt(GameObject prefab, Vector3 worldPosition, Quaternion rotation, float lifetime)
+        {
+            // Compose with the prefab's own rotation so however it was
+            // authored (root, child, or Shape module) is preserved.
+            var fx = Instantiate(prefab, worldPosition, rotation * prefab.transform.rotation, transform);
+            Destroy(fx, lifetime);
+        }
+
+        // Slash / pierce: placed along the attacker -> target line and
+        // rotated to point down it, so it always looks like it comes
+        // from the attacker. Capped at the target's distance.
+        private void PlayMeleeEffect(AbilityVisuals v, Vector3 from, Vector3 to)
+        {
+            var direction = to - from;
+            if (v.MeleeEffectPrefab == null || direction.sqrMagnitude < 0.0001f) return;
+
+            float offset = Mathf.Min(v.MeleeEffectOffsetTiles * UnitView.TileWorldSize(), direction.magnitude);
+            SpawnEffectAt(v.MeleeEffectPrefab, from + direction.normalized * offset,
+                FacingRotation(direction), v.EffectLifetime);
+        }
+
+        private void PlayImpactEffect(CombatUnit attacker, IAbility ability, GridPosition tile)
+        {
+            var v = (ability as AbilitySO)?.Visuals;
+            if (v == null) return;
+
+            Quaternion? rotation = null;
+            if (v.OrientImpactToAttack)
+            {
+                var direction = GridToWorld.ToWorldPosition(tile) - GridToWorld.ToWorldPosition(attacker.Position);
+                if (direction.sqrMagnitude > 0.0001f) rotation = FacingRotation(direction);
+            }
+            SpawnEffect(v.ImpactEffectPrefab, tile, v.EffectLifetime, rotation);
+        }
+
+        private void PlayAreaEffect(CombatUnit attacker, IAbility ability, GridPosition impactTile)
+        {
+            var v = (ability as AbilitySO)?.Visuals;
+            if (v == null || v.AreaEffectPrefab == null) return;
+
+            if (v.AreaEffectOnEveryTile)
+                foreach (var tile in AreaOfEffect.GetAffectedTiles(
+                    attacker.Position, impactTile, ability.AreaShape, ability.AreaRadius))
+                    SpawnEffect(v.AreaEffectPrefab, tile, v.EffectLifetime);
+            else
+                SpawnEffect(v.AreaEffectPrefab, impactTile, v.EffectLifetime);
+        }
+
+        private IEnumerator FlushSwarm()
+        {
+            _endTurnPending = true;   // locks input while the group plays out
+            _swarmReserved.Clear();
+            foreach (var v in _unitViews.Values) v.SetHighlighted(false);
+
+            yield return StartCoroutine(WalkSwarm());                  // 1) all moves together
+
+            foreach (var (unit, run) in _swarmAttacks.ToList())        // 2) attacks, one by one
+                if (unit.IsAlive) yield return StartCoroutine(run);
+
+            foreach (var unit in _swarmEnded) FinishTurnTick(unit);    // 3) end-of-turn ticks
+
+            _swarmMoves.Clear();
+            _swarmAttacks.Clear();
+            _swarmEnded.Clear();
+            _endTurnPending = false;
+
+            _battle.ReevaluateOutcome();
+            while (_battle.Outcome == BattleOutcome.InProgress && !_battle.CurrentUnit.IsAlive)
+                _battle.EndCurrentTurn();
+            BeginTurn();
+        }
+
+        private IEnumerator WalkSwarm()
+        {
+            // Once-per-move effects, in initiative order.
+            foreach (var m in _swarmMoves)
+            {
+                var moveTick = m.Unit.Status.OnMoved();
+                foreach (var line in moveTick.Log) Debug.Log(line);
+                if (moveTick.OwnerDied)
+                {
+                    _unitViews[m.Unit].Refresh();
+                    HandleDeath(m.Unit);
+                    m.Stopped = true;
+                    continue;
+                }
+                foreach (var ended in _battlefieldObjects.RemoveOwnedByMovement(m.Unit))
+                    Debug.Log($"{m.Unit.DisplayName}'s {ended.Name} fades as they move.");
+            }
+
+            int maxSteps = _swarmMoves.Count == 0 ? 0 : _swarmMoves.Max(m => m.Path.Count);
+            for (int i = 0; i < maxSteps; i++)
+            {
+                // Everyone slides one tile at the same time...
+                foreach (var m in _swarmMoves)
+                    if (!m.Stopped && i < m.Path.Count && m.Unit.IsAlive)
+                        _unitViews[m.Unit].StepTo(m.Path[i]);
+
+                while (_swarmMoves.Any(m => _unitViews[m.Unit].IsMoving)) yield return null;
+
+                // ...then the game state catches up, in initiative order.
+                foreach (var m in _swarmMoves)
+                {
+                    if (m.Stopped || i >= m.Path.Count || !m.Unit.IsAlive) continue;
+
+                    var tile = m.Path[i];
+                    var view = _unitViews[m.Unit];
+                    var blocker = FindLivingUnitAt(tile);
+                    if (blocker != null && blocker != m.Unit)   // someone's in the way: stop here
+                    {
+                        m.Stopped = true;
+                        view.Refresh();                         // snaps the glyph back
+                        continue;
+                    }
+
+                    m.Unit.Position = tile;
+                    view.Refresh();
+                    ResolveBattlefieldEntry(m.Unit, tile);      // traps + fog, per tile
+                    if (!m.Unit.IsAlive || !m.Unit.Status.CanMove) m.Stopped = true;
+                }
+            }
+        }
+
+        private void EndTurnNow()
         {
             var ending = _battle.CurrentUnit;
-            if (ending != null)
+            if (ending != null && ending.Faction == Faction.Enemy)
             {
-                bool wasAlive = ending.IsAlive;
-                var endTick = ending.Status.OnTurnEnd();
-                foreach (var line in endTick.Log) Debug.Log(line);
-                if (wasAlive && !ending.IsAlive)
-                {
-                    _unitViews[ending].Refresh();
-                    HandleDeath(ending);
-                }
+                _swarmEnded.Add(ending);
+                _swarmRound = _battle.RoundNumber;
+            }
+            else if (ending != null)
+            {
+                FinishTurnTick(ending);
             }
 
             _battle.EndCurrentTurn();
             BeginTurn();
+        }
+
+        private void FinishTurnTick(CombatUnit ending)
+        {
+            bool wasAlive = ending.IsAlive;
+            var endTick = ending.Status.OnTurnEnd();
+            foreach (var line in endTick.Log) Debug.Log(line);
+            if (wasAlive && !ending.IsAlive)
+            {
+                _unitViews[ending].Refresh();
+                HandleDeath(ending);
+            }
+        }
+
+        private void EndTurn()
+        {
+            ClearPathPreview();
+            if (_endTurnPending) return;
+            if (_movesInProgress > 0) { StartCoroutine(EndTurnAfterMovement()); return; }
+            EndTurnNow();
+        }
+
+        private IEnumerator EndTurnAfterMovement()
+        {
+            _endTurnPending = true;
+            while (_movesInProgress > 0) yield return null;
+            _endTurnPending = false;
+            EndTurnNow();
         }
     }
 }

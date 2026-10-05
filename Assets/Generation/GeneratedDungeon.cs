@@ -5,20 +5,26 @@ using DungeonTower.Core;
 namespace DungeonTower.Generation
 {
     /// <summary>
-    /// A generated map plus the rooms carved into it, in placement order.
+    /// A generated map plus the rooms carved into it, in placement order,
+    /// plus the tiles that make up the exit down to the next floor.
     /// Also answers "which tiles are corridor" (walkable but not inside
     /// any room) — derived on demand rather than tracked separately during
     /// carving, so there's only one source of truth for room boundaries.
+    /// Door tiles count as corridor tiles (they sit in the room's wall
+    /// line, outside the room's floor rectangle).
     /// </summary>
     public sealed class GeneratedDungeon
     {
         public DungeonMap Map { get; }
         public IReadOnlyList<Room> Rooms { get; }
+        public IReadOnlyList<GridPosition> ExitTiles { get; }
 
-        public GeneratedDungeon(DungeonMap map, IReadOnlyList<Room> rooms)
+        public GeneratedDungeon(
+            DungeonMap map, IReadOnlyList<Room> rooms, IReadOnlyList<GridPosition> exitTiles = null)
         {
             Map = map;
             Rooms = rooms;
+            ExitTiles = exitTiles ?? new List<GridPosition>();
         }
 
         public IEnumerable<GridPosition> GetCorridorTiles()

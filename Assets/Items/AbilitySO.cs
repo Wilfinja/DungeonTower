@@ -80,6 +80,14 @@ namespace DungeonTower.Items
         [SerializeField, Min(0)] private int _areaRadius;
         [SerializeField, Min(0)] private int _cooldownTurns;
 
+        [Header("Cost")]
+        [Tooltip("MP spent each time this is used from a weapon or read from a scroll. 0 = free. Potions never charge MP, whatever this says.")]
+        [SerializeField, Min(0)] private int _mpCost;
+
+        [Header("Visuals")]
+        [SerializeField] private AbilityVisuals _visuals = new AbilityVisuals();
+        public AbilityVisuals Visuals => _visuals;
+
         public string Name => _abilityName;
         public EffectKind EffectKind => _effectKind;
         public AttackKind Kind => _kind;
@@ -91,6 +99,7 @@ namespace DungeonTower.Items
         public AttackShape AreaShape => _areaShape;
         public int AreaRadius => _areaRadius;
         public int CooldownTurns => _cooldownTurns;
+        public int MpCost => _mpCost;
         public bool Silenceable => _silenceable;
 
         // Never null, even for an asset serialized before these fields existed.

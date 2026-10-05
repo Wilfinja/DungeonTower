@@ -12,11 +12,12 @@ namespace DungeonTower.UI
     /// <summary>
     /// Toggleable inventory screen: the party's shared stash as a
     /// scrollable grid, plus ONE party member's gear at a time, switched
-    /// with the two member buttons. A member's gear is two separate
+    /// with the member tab buttons (one section per hero — see
+    /// MemberSection). A member's gear is two separate
     /// grids — a 2-slot equipment row (weapon, armor) and a 4-slot belt
     /// row — so a "Weapon / Armor" and a "Belt" heading can sit next to
     /// each, however they're arranged on screen (stacked or
-    /// side-by-side; that's layout, not code). The other member's grids
+    /// side-by-side; that's layout, not code). The other members' grids
     /// are fully hidden while not selected, so cross-member drags aren't
     /// possible through the UI — switch tabs, then drag within the
     /// stash. Items are dragged between slots to equip, unequip, load
@@ -52,25 +53,27 @@ namespace DungeonTower.UI
         [SerializeField] private ScrollRect _scrollRect; // optional — scrolled to the top whenever the panel opens
         [SerializeField, Min(1)] private int _minSlots = 24;
 
-        [Header("Member tabs")]
-        [SerializeField] private Button _member1Button;
-        [SerializeField] private TextMeshProUGUI _member1Label;
-        [SerializeField] private Button _member2Button;
-        [SerializeField] private TextMeshProUGUI _member2Label;
+        // One section per party member, in party order (element 0 is
+        // the first hero, and so on). Everything a member needs lives in
+        // one element: their tab button and label, plus the two grids
+        // that hold their gear.
+        [Serializable]
+        public sealed class MemberSection
+        {
+            public Button TabButton;
+            public TextMeshProUGUI TabLabel;
+            [Tooltip("2-slot grid: weapon, then armor.")]
+            public Transform EquipmentContainer;
+            [Tooltip("Grid of unit.Belt.SlotCount slots.")]
+            public Transform BeltContainer;
+        }
 
-        [Header("Member 1 — Equipment (2-slot grid: weapon, armor) and Belt (grid of unit.Belt.SlotCount)")]
-        [SerializeField] private Transform _member1EquipmentContainer;
-        [SerializeField] private Transform _member1BeltContainer;
-
-        [Header("Member 2 — Equipment (2-slot grid: weapon, armor) and Belt (grid of unit.Belt.SlotCount)")]
-        [SerializeField] private Transform _member2EquipmentContainer;
-        [SerializeField] private Transform _member2BeltContainer;
+        [Header("Member sections (one per hero, in party order)")]
+        [SerializeField] private List<MemberSection> _members = new List<MemberSection>();
 
         private InventorySlotPool _stashPool;
-        private InventorySlotPool _member1EquipmentPool;
-        private InventorySlotPool _member1BeltPool;
-        private InventorySlotPool _member2EquipmentPool;
-        private InventorySlotPool _member2BeltPool;
+        private readonly List<InventorySlotPool> _equipmentPools = new List<InventorySlotPool>();
+        private readonly List<InventorySlotPool> _beltPools = new List<InventorySlotPool>();
 
         private InventorySlotView _ghost;
         private Canvas _ghostCanvas;
@@ -80,8 +83,6 @@ namespace DungeonTower.UI
         private bool _inCombat;
         private int _currentIndex;   // whoever's turn it currently is
         private int _selectedIndex;  // which tab is open
-        private string _member1Name = "";
-        private string _member2Name = "";
         private IPotion _pendingConfirmPotion;
 
         public event Action<IWeapon, int> WeaponEquipRequested;
@@ -95,8 +96,12 @@ namespace DungeonTower.UI
 
         private void Awake()
         {
-            if (_member1Button != null) _member1Button.onClick.AddListener(() => SelectMember(0));
-            if (_member2Button != null) _member2Button.onClick.AddListener(() => SelectMember(1));
+            for (int i = 0; i < _members.Count; i++)
+            {
+                int index = i;
+                if (_members[i].TabButton != null)
+                    _members[i].TabButton.onClick.AddListener(() => SelectMember(index));
+            }
         }
 
         public void Initialize(PartyInventory inventory)
@@ -107,13 +112,6 @@ namespace DungeonTower.UI
         public void SetPartyMembers(IReadOnlyList<CombatUnit> members)
         {
             _partyMembers = members;
-            RefreshTabs();
-        }
-
-        public void ConfigurePartyNames(string member1Name, string member2Name)
-        {
-            _member1Name = member1Name;
-            _member2Name = member2Name;
             RefreshTabs();
         }
 
@@ -182,23 +180,28 @@ namespace DungeonTower.UI
             if (gameObject.activeSelf) Populate();
         }
 
+        // Tab names come straight from the units, so a renamed hero shows
+        // up with no extra step. A tab with no hero behind it is hidden.
         private void RefreshTabs()
         {
-            SetTab(_member1Button, _member1Label, 0, _member1Name);
-            SetTab(_member2Button, _member2Label, 1, _member2Name);
-        }
-
-        private void SetTab(Button button, TextMeshProUGUI label, int index, string memberName)
-        {
-            bool alive = _partyMembers == null || index >= _partyMembers.Count || _partyMembers[index].IsAlive;
-            bool locked = _inCombat && index != _currentIndex;
-
-            if (label != null)
+            for (int i = 0; i < _members.Count; i++)
             {
-                label.text = alive ? memberName : $"{memberName} (fallen)";
-                label.fontStyle = index == _selectedIndex ? FontStyles.Bold : FontStyles.Normal;
+                var section = _members[i];
+                bool exists = _partyMembers != null && i < _partyMembers.Count;
+
+                if (section.TabButton != null) section.TabButton.gameObject.SetActive(exists);
+                if (!exists) continue;
+
+                var unit = _partyMembers[i];
+                bool locked = _inCombat && i != _currentIndex;
+
+                if (section.TabLabel != null)
+                {
+                    section.TabLabel.text = unit.IsAlive ? unit.DisplayName : $"{unit.DisplayName} (fallen)";
+                    section.TabLabel.fontStyle = i == _selectedIndex ? FontStyles.Bold : FontStyles.Normal;
+                }
+                if (section.TabButton != null) section.TabButton.interactable = unit.IsAlive && !locked;
             }
-            if (button != null) button.interactable = alive && !locked;
         }
 
         // ---- Rendering --------------------------------------------------
@@ -209,20 +212,17 @@ namespace DungeonTower.UI
             RefreshTabs();
             PopulateStash();
 
-            SetContainerActive(_member1EquipmentContainer, _selectedIndex == 0);
-            SetContainerActive(_member1BeltContainer, _selectedIndex == 0);
-            SetContainerActive(_member2EquipmentContainer, _selectedIndex == 1);
-            SetContainerActive(_member2BeltContainer, _selectedIndex == 1);
+            // Only the selected member's grids are shown and filled; every
+            // other member's are hidden and emptied so a drag can never
+            // highlight or land in someone else's gear.
+            for (int i = 0; i < _members.Count; i++)
+            {
+                bool selected = i == _selectedIndex;
+                SetContainerActive(_members[i].EquipmentContainer, selected);
+                SetContainerActive(_members[i].BeltContainer, selected);
 
-            if (_selectedIndex == 0)
-            {
-                PopulateMember(0, _member1EquipmentPool, _member1BeltPool);
-                HideMember(_member2EquipmentPool, _member2BeltPool);
-            }
-            else
-            {
-                HideMember(_member1EquipmentPool, _member1BeltPool);
-                PopulateMember(1, _member2EquipmentPool, _member2BeltPool);
+                if (selected) PopulateMember(i, _equipmentPools[i], _beltPools[i]);
+                else HideMember(_equipmentPools[i], _beltPools[i]);
             }
         }
 
@@ -236,14 +236,17 @@ namespace DungeonTower.UI
             if (_stashPool != null) return;
 
             _stashPool = new InventorySlotPool(_slotContainer, _slotPrefab, OnSlotCreated);
-            if (_member1EquipmentContainer != null)
-                _member1EquipmentPool = new InventorySlotPool(_member1EquipmentContainer, _slotPrefab, OnSlotCreated);
-            if (_member1BeltContainer != null)
-                _member1BeltPool = new InventorySlotPool(_member1BeltContainer, _slotPrefab, OnSlotCreated);
-            if (_member2EquipmentContainer != null)
-                _member2EquipmentPool = new InventorySlotPool(_member2EquipmentContainer, _slotPrefab, OnSlotCreated);
-            if (_member2BeltContainer != null)
-                _member2BeltPool = new InventorySlotPool(_member2BeltContainer, _slotPrefab, OnSlotCreated);
+
+            // The two lists line up with _members index for index; a
+            // missing container leaves a null entry that the rest of the
+            // class already treats as "nothing to draw".
+            foreach (var section in _members)
+            {
+                _equipmentPools.Add(section.EquipmentContainer != null
+                    ? new InventorySlotPool(section.EquipmentContainer, _slotPrefab, OnSlotCreated) : null);
+                _beltPools.Add(section.BeltContainer != null
+                    ? new InventorySlotPool(section.BeltContainer, _slotPrefab, OnSlotCreated) : null);
+            }
         }
 
         private void PopulateStash()
@@ -531,14 +534,12 @@ namespace DungeonTower.UI
         {
             if (_stashPool != null)
                 foreach (var slot in _stashPool.Active()) yield return slot;
-            if (_member1EquipmentPool != null)
-                foreach (var slot in _member1EquipmentPool.Active()) yield return slot;
-            if (_member1BeltPool != null)
-                foreach (var slot in _member1BeltPool.Active()) yield return slot;
-            if (_member2EquipmentPool != null)
-                foreach (var slot in _member2EquipmentPool.Active()) yield return slot;
-            if (_member2BeltPool != null)
-                foreach (var slot in _member2BeltPool.Active()) yield return slot;
+            foreach (var pool in _equipmentPools)
+                if (pool != null)
+                    foreach (var slot in pool.Active()) yield return slot;
+            foreach (var pool in _beltPools)
+                if (pool != null)
+                    foreach (var slot in pool.Active()) yield return slot;
         }
     }
 }

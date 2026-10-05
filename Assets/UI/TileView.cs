@@ -28,18 +28,23 @@ namespace DungeonTower.UI
         [SerializeField] private Color _previewHighlightColor = new Color(0.9f, 0.75f, 0.2f);
         [SerializeField] private Color _hiddenColor = Color.black;
         [SerializeField, Range(0f, 1f)] private float _exploredDarken = 0.35f;
+        [SerializeField] private Color _doorClosedColor = new Color(0.45f, 0.30f, 0.15f);
+        [SerializeField] private Color _doorOpenColor = new Color(0.28f, 0.19f, 0.10f);
+        [SerializeField] private Color _exitColor = new Color(0.20f, 0.70f, 0.40f);
 
         private SpriteRenderer _renderer;
         private TileType _type;
+        private bool _doorOpen;
         private HighlightState _highlightState = HighlightState.None;
         private FogState _fogState = FogState.Visible;
 
         public GridPosition Position { get; private set; }
 
-        public void Initialize(GridPosition position, TileType type)
+        public void Initialize(GridPosition position, TileType type, bool doorOpen = false)
         {
             Position = position;
             _type = type;
+            _doorOpen = doorOpen;
             if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
             ApplyColor();
         }
@@ -56,6 +61,12 @@ namespace DungeonTower.UI
         public void SetHighlighted(HighlightState state)
         {
             _highlightState = state;
+            ApplyColor();
+        }
+
+        public void SetDoorOpen(bool open)
+        {
+            _doorOpen = open;
             ApplyColor();
         }
 
@@ -89,6 +100,18 @@ namespace DungeonTower.UI
             _renderer.color = color;
         }
 
-        private Color BaseColor => _type == TileType.Wall ? _wallColor : _floorColor;
+        private Color BaseColor
+        {
+            get
+            {
+                switch (_type)
+                {
+                    case TileType.Wall: return _wallColor;
+                    case TileType.Door: return _doorOpen ? _doorOpenColor : _doorClosedColor;
+                    case TileType.Exit: return _exitColor;
+                    default: return _floorColor;
+                }
+            }
+        }
     }
 }

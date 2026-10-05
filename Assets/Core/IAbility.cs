@@ -29,6 +29,7 @@ namespace DungeonTower.Core
         // Heal-only.
         int HealHp { get; }
         int HealMp { get; }
+        int MpCost {  get; }
 
         // Buff-only — applied as a permanent-for-the-battle addition,
         // same DerivedStatBonus shape ArmorSO already grants passively.

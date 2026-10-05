@@ -38,11 +38,13 @@ namespace DungeonTower.Combat
     public sealed class SightMapView : IWalkableMap
     {
         private readonly IWalkableMap _baseMap;
+        private readonly ISightBlockingMap _baseSight; // null if the map has nothing see-blocking-but-walkable
         private readonly BattlefieldObjectRegistry _registry;
 
         public SightMapView(IWalkableMap baseMap, BattlefieldObjectRegistry registry)
         {
             _baseMap = baseMap;
+            _baseSight = baseMap as ISightBlockingMap;
             _registry = registry;
         }
 
@@ -50,9 +52,13 @@ namespace DungeonTower.Combat
 
         // LineOfSight.HasClearPath treats "not walkable" as "blocks
         // sight" — that's the whole trick here: a Cloud blocks sight
-        // without touching MovementMapView at all, and a solid Wall
-        // (which sets both flags) blocks both, each through its own view.
+        // without touching MovementMapView at all, a solid Wall
+        // (which sets both flags) blocks both, each through its own view,
+        // and a closed door is walkable on the base map but reports
+        // BlocksSight until something steps onto it.
         public bool IsWalkable(GridPosition position)
-            => _baseMap.IsWalkable(position) && !_registry.BlocksSightAt(position);
+            => _baseMap.IsWalkable(position)
+               && (_baseSight == null || !_baseSight.BlocksSight(position))
+               && !_registry.BlocksSightAt(position);
     }
 }

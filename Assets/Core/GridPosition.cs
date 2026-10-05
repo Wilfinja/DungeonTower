@@ -21,6 +21,9 @@ namespace DungeonTower.Core
         public int ManhattanDistance(GridPosition other)
             => Math.Abs(X - other.X) + Math.Abs(Y - other.Y);
 
+        public int ChebyshevDistance(GridPosition other)
+    => Math.Max(Math.Abs(X - other.X), Math.Abs(Y - other.Y));
+
         public IEnumerable<GridPosition> Neighbors()
         {
             yield return new GridPosition(X + 1, Y);
