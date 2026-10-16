@@ -15,7 +15,8 @@ namespace DungeonTower.Core
         public int Body { get; set; }
         public int Mind { get; set; }
         public int Spirit { get; set; }
-        public IWeapon Weapon { get; set; }
+        public IWeapon Weapon { get; set; }     // main hand
+        public IWeapon OffHand { get; set; }
         public IArmor Armor { get; set; }
 
         // Each entry fills one belt slot's worth, in order; the same item

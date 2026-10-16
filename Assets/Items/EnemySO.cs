@@ -34,6 +34,8 @@ namespace DungeonTower.Items
         [SerializeField, Min(0)] private int _mind = 5;
         [SerializeField, Min(0)] private int _spirit = 5;
         [SerializeField] private WeaponSO _weapon;
+        [Tooltip("Optional second hand (shield, focus, or a second one-hander).")]
+        [SerializeField] private WeaponSO _offHand;
         [SerializeField] private ArmorSO _armor;
         [SerializeField, Min(1)] private int _detectionRadius = 5;
         [SerializeField, Min(1)] private int _alertRadius = 4;
@@ -60,6 +62,7 @@ namespace DungeonTower.Items
         public EnemyRole Role => _role;
         public StatBlock Stats => new StatBlock(_body, _mind, _spirit);
         public IWeapon Weapon => _weapon;
+        public IWeapon OffHand => _offHand;
         public IArmor Armor => _armor;
         public int DetectionRadius => _detectionRadius;
         public int AlertRadius => _alertRadius;

@@ -20,7 +20,16 @@ namespace DungeonTower.Combat
         public string DisplayName { get; }
         public Faction Faction { get; }
         public UnitStats Stats { get; }
-        public IWeapon EquippedWeapon { get; private set; }
+
+        // Two hands. EquippedWeapon is the main hand (older code reads it).
+        public IWeapon MainHand { get; private set; }
+        public IWeapon OffHand { get; private set; }
+        public IWeapon EquippedWeapon => MainHand;
+
+        // What the ability bar shows: main hand's abilities, then the off
+        // hand's, identical ones listed once, at most HandRules.MaxAbilities.
+        private readonly List<IAbility> _weaponAbilities = new List<IAbility>();
+        public IReadOnlyList<IAbility> WeaponAbilities => _weaponAbilities;
         public int DetectionRadius { get; }
         public int AlertRadius { get; }
         public EnemyTargetingStrategy TargetingStrategy { get; }
@@ -123,29 +132,82 @@ namespace DungeonTower.Combat
 
         public void Alert() => IsAlerted = true;
 
-        // Only one weapon slot exists right now. Returns false without
-        // changing anything if the unit's stats don't meet the weapon's
-        // requirement.
+        public IWeapon GetHand(HandSlot slot) => slot == HandSlot.Main ? MainHand : OffHand;
+
+        // Stat requirements plus the slot rules. displaceOther skips the
+        // "other hand must be empty / not two-handed" checks, for callers
+        // that will move the other hand's item out of the way first.
+        public bool CanEquipTo(IWeapon weapon, HandSlot slot, out string reason, bool displaceOther = false)
+        {
+            reason = null;
+            if (weapon == null) return false;
+            if (!weapon.CanEquip(Stats.Current))
+            {
+                reason = "stat requirement not met";
+                return false;
+            }
+
+            var other = displaceOther ? null : GetHand(slot == HandSlot.Main ? HandSlot.Off : HandSlot.Main);
+            return HandRules.Fits(weapon, slot, other, out reason);
+        }
+
+        // Legacy entry points: main hand (off-hand-only gear goes to the off hand).
         public bool TryEquip(IWeapon weapon) => TryEquip(weapon, out _);
 
-        // Same as above, but also hands back whatever was equipped before
-        // (null if nothing was) — needed so a caller swapping gear via the
-        // party inventory can put the old item back in the pool instead of
-        // it just vanishing.
         public bool TryEquip(IWeapon weapon, out IWeapon previouslyEquipped)
+            => TryEquip(weapon, weapon != null && weapon.Hands == HandUse.OffHand ? HandSlot.Off : HandSlot.Main,
+                out previouslyEquipped);
+
+        // Hands back whatever was in that hand (null if nothing) so a caller
+        // swapping gear can return it to the stash.
+        public bool TryEquip(IWeapon weapon, HandSlot slot, out IWeapon previouslyEquipped)
         {
             previouslyEquipped = null;
-            if (weapon == null || !weapon.CanEquip(Stats.Current)) return false;
-            previouslyEquipped = EquippedWeapon;
-            EquippedWeapon = weapon;
+            if (!CanEquipTo(weapon, slot, out _)) return false;
+            previouslyEquipped = GetHand(slot);
+            SetHand(slot, weapon);
             return true;
         }
 
-        public IWeapon UnequipWeapon()
+        // No validation: the caller has already checked (inventory swaps do).
+        public void SetHand(HandSlot slot, IWeapon weapon)
         {
-            var previous = EquippedWeapon;
-            EquippedWeapon = null;
+            if (slot == HandSlot.Main) MainHand = weapon;
+            else OffHand = weapon;
+            RefreshHands();
+        }
+
+        public IWeapon Unequip(HandSlot slot)
+        {
+            var previous = GetHand(slot);
+            SetHand(slot, null);
             return previous;
+        }
+
+        public IWeapon UnequipWeapon() => Unequip(HandSlot.Main);
+
+        private void RefreshHands()
+        {
+            _weaponAbilities.Clear();
+            AddAbilitiesFrom(MainHand);
+            AddAbilitiesFrom(OffHand);
+
+            var bonus = default(DerivedStatBonus);
+            if (MainHand != null) bonus += MainHand.PassiveBonus;
+            if (OffHand != null) bonus += OffHand.PassiveBonus;
+            Stats.SetWeaponBonus(bonus);
+
+            ClampVitals();   // a weapon's HP/MP bonus can leave with it
+        }
+
+        private void AddAbilitiesFrom(IWeapon weapon)
+        {
+            if (weapon == null) return;
+            foreach (var ability in weapon.Abilities)
+            {
+                if (_weaponAbilities.Count >= HandRules.MaxAbilities) return;
+                if (ability != null && !_weaponAbilities.Contains(ability)) _weaponAbilities.Add(ability);
+            }
         }
 
         // Fills HP and MP to their current maximums. Call once after a unit's
@@ -204,6 +266,44 @@ namespace DungeonTower.Combat
         {
             CurrentHp = Math.Min(CurrentHp, Stats.MaxHp);
             CurrentMp = Math.Min(CurrentMp, Stats.MaxMp);
+        }
+
+        // A heal as the TARGET experiences it: Body's healing-received bonus
+        // (and gear) scales it first. Use this for every real heal — potions,
+        // heal abilities, Regeneration. Plain Heal() stays raw for bookkeeping
+        // (a level-up topping off new max HP, debug tools). Returns HP actually restored.
+        public int ReceiveHeal(int amount)
+        {
+            if (amount <= 0 || !IsAlive) return 0;
+            double factor = 1.0 + Stats.HealingReceived / 100.0;
+            int scaled = (int)Math.Round(amount * factor, MidpointRounding.AwayFromZero);
+            int before = CurrentHp;
+            Heal(scaled);
+            return CurrentHp - before;
+        }
+
+        // Spirit's MP regen, called once at the start of this unit's own turn
+        // (BattleController only calls it while in combat). Whole MP only —
+        // the fractional part carries to the next turn, so every Spirit
+        // point counts. Returns MP actually gained.
+        private float _mpRegenCarry;
+
+        public int RegenMp()
+        {
+            if (!IsAlive || CurrentMp >= Stats.MaxMp)
+            {
+                _mpRegenCarry = 0f;
+                return 0;
+            }
+
+            _mpRegenCarry += Stats.MpRegen;
+            int whole = (int)Math.Floor(_mpRegenCarry);
+            if (whole <= 0) return 0;
+
+            _mpRegenCarry -= whole;
+            int before = CurrentMp;
+            RestoreMp(whole);
+            return CurrentMp - before;
         }
 
         // Mirrors Heal — added for potions/scrolls that restore MP

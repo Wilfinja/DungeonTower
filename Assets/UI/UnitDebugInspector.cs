@@ -115,6 +115,10 @@ namespace DungeonTower.UI
         [DebugReadOnly, SerializeField] private int moveRange;
         [DebugReadOnly, SerializeField] private float statusResist;
         [DebugReadOnly, SerializeField] private float critChance;
+        [DebugReadOnly, SerializeField] private float supportPower;
+        [DebugReadOnly, SerializeField] private float potency;
+        [DebugReadOnly, SerializeField] private float healingReceived;
+        [DebugReadOnly, SerializeField] private float mpRegen;
 
         // ---------------- AI (read-only) ----------------
         [Header("AI / senses (read-only)")]
@@ -311,7 +315,7 @@ namespace DungeonTower.UI
             isAlive = _unit.IsAlive;
             isAlerted = _unit.IsAlerted;
             gridPosition = new Vector2Int(_unit.Position.X, _unit.Position.Y);
-            equippedWeapon = NameOf(_unit.EquippedWeapon);
+            equippedWeapon = NameOf(_unit.MainHand) + " | off: " + NameOf(_unit.OffHand);
             equippedArmor = NameOf(s.EquippedArmor);
 
             currentHp = _shownHp = _unit.CurrentHp;
@@ -332,6 +336,10 @@ namespace DungeonTower.UI
             moveRange = s.MoveRange;
             statusResist = s.StatusResist;
             critChance = s.CritChance;
+            supportPower = s.SupportPower;
+            potency = s.Potency;
+            healingReceived = s.HealingReceived;
+            mpRegen = s.MpRegen;
 
             detectionRadius = _unit.DetectionRadius;
             alertRadius = _unit.AlertRadius;
@@ -359,11 +367,8 @@ namespace DungeonTower.UI
 
             // Cooldowns
             cooldowns.Clear();
-            if (_unit.EquippedWeapon != null)
-            {
-                foreach (var ability in _unit.EquippedWeapon.Abilities)
-                    cooldowns.Add($"{ability.Name}: {_unit.GetRemainingCooldown(ability)}");
-            }
+            foreach (var ability in _unit.WeaponAbilities)
+                cooldowns.Add($"{ability.Name}: {_unit.GetRemainingCooldown(ability)}");
         }
 
         private static string NameOf(object o)

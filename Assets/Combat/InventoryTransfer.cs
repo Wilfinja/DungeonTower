@@ -4,7 +4,8 @@ using DungeonTower.Core;
 
 namespace DungeonTower.Combat
 {
-    public enum SlotZone { Stash, Weapon, Armor, Belt }
+    // Weapon = main hand.
+    public enum SlotZone { Stash, Weapon, Armor, Belt, OffHand }
 
     /// <summary>
     /// Addresses one slot anywhere in the inventory UI: a stash cell, a
@@ -27,6 +28,7 @@ namespace DungeonTower.Combat
 
         public static SlotRef Stash(int index) => new SlotRef(SlotZone.Stash, -1, index);
         public static SlotRef WeaponOf(int owner) => new SlotRef(SlotZone.Weapon, owner, 0);
+        public static SlotRef OffHandOf(int owner) => new SlotRef(SlotZone.OffHand, owner, 0);
         public static SlotRef ArmorOf(int owner) => new SlotRef(SlotZone.Armor, owner, 0);
         public static SlotRef BeltOf(int owner, int index) => new SlotRef(SlotZone.Belt, owner, index);
 
@@ -168,6 +170,8 @@ namespace DungeonTower.Combat
             }
         }
 
+        private static HandSlot HandOf(SlotZone zone) => zone == SlotZone.OffHand ? HandSlot.Off : HandSlot.Main;
+
         private static bool CanStack(SlotRef slot) => slot.Zone == SlotZone.Stash || slot.Zone == SlotZone.Belt;
 
         private static bool TryRead(PartyInventory stash, IReadOnlyList<CombatUnit> party, SlotRef slot, out ItemStack content)
@@ -188,8 +192,9 @@ namespace DungeonTower.Combat
             switch (slot.Zone)
             {
                 case SlotZone.Weapon:
+                case SlotZone.OffHand:
                 {
-                    var weapon = unit.EquippedWeapon;
+                    var weapon = unit.GetHand(HandOf(slot.Zone));
                     content = weapon != null ? new ItemStack(weapon, 1) : default;
                     return true;
                 }
@@ -221,12 +226,10 @@ namespace DungeonTower.Combat
                     break;
 
                 case SlotZone.Weapon:
-                {
-                    var unit = party[slot.Owner];
-                    if (content.IsEmpty) unit.UnequipWeapon();
-                    else unit.TryEquip((IWeapon)content.Item);
+                case SlotZone.OffHand:
+                    // Accepts() already vetted this, so no re-validation here.
+                    party[slot.Owner].SetHand(HandOf(slot.Zone), content.IsEmpty ? null : (IWeapon)content.Item);
                     break;
-                }
 
                 case SlotZone.Armor:
                 {
@@ -255,7 +258,9 @@ namespace DungeonTower.Combat
                 case SlotZone.Stash:
                     return true;
                 case SlotZone.Weapon:
-                    return content.Item is IWeapon weapon && weapon.CanEquip(party[slot.Owner].Stats.Current);
+                case SlotZone.OffHand:
+                    return content.Item is IWeapon weapon
+                        && party[slot.Owner].CanEquipTo(weapon, HandOf(slot.Zone), out _);
                 case SlotZone.Armor:
                     return content.Item is IArmor armor && armor.CanEquip(party[slot.Owner].Stats.Current);
                 case SlotZone.Belt:
@@ -273,9 +278,12 @@ namespace DungeonTower.Combat
             switch (slot.Zone)
             {
                 case SlotZone.Weapon:
-                    return content.Item is IWeapon
-                        ? $"{owner} cannot equip {name} — stat requirement not met"
-                        : $"{name} isn't a weapon.";
+                case SlotZone.OffHand:
+                {
+                    if (!(content.Item is IWeapon w)) return $"{name} isn't a weapon.";
+                    party[slot.Owner].CanEquipTo(w, HandOf(slot.Zone), out var why);
+                    return $"{owner} cannot equip {name} there — {why}";
+                }
                 case SlotZone.Armor:
                     return content.Item is IArmor
                         ? $"{owner} cannot equip {name} — stat requirement not met"

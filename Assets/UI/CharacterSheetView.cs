@@ -69,6 +69,9 @@ namespace DungeonTower.UI
         [Header("Equipment")]
         [SerializeField] private TextMeshProUGUI _weaponNameLabel;
         [SerializeField] private TextMeshProUGUI _weaponDetailsLabel;
+        [Tooltip("Optional. Leave empty and the off hand is listed under the main hand instead.")]
+        [SerializeField] private TextMeshProUGUI _offHandNameLabel;
+        [SerializeField] private TextMeshProUGUI _offHandDetailsLabel;
         [SerializeField] private TextMeshProUGUI _armorNameLabel;
         [SerializeField] private TextMeshProUGUI _armorDetailsLabel;
 
@@ -217,7 +220,12 @@ namespace DungeonTower.UI
                 h = h * 31 + s.MoveRange;
                 h = h * 31 + Mathf.RoundToInt(s.StatusResist * 10f);
                 h = h * 31 + Mathf.RoundToInt(s.CritChance * 10f);
-                h = h * 31 + (unit.EquippedWeapon != null ? unit.EquippedWeapon.GetHashCode() : 0);
+                h = h * 31 + Mathf.RoundToInt(s.SupportPower * 10f);
+                h = h * 31 + Mathf.RoundToInt(s.Potency * 10f);
+                h = h * 31 + Mathf.RoundToInt(s.HealingReceived * 10f);
+                h = h * 31 + Mathf.RoundToInt(s.MpRegen * 100f);
+                h = h * 31 + (unit.MainHand != null ? unit.MainHand.GetHashCode() : 0);
+                h = h * 31 + (unit.OffHand != null ? unit.OffHand.GetHashCode() : 0);
                 h = h * 31 + (s.EquippedArmor != null ? s.EquippedArmor.GetHashCode() : 0);
                 return h;
             }
@@ -265,11 +273,33 @@ namespace DungeonTower.UI
                 $"Initiative: {s.Initiative}\n" +
                 $"Move Range: {s.MoveRange}\n" +
                 $"Status Resist: {UiText.Num(s.StatusResist)}%\n" +
-                $"Crit Chance: {UiText.Num(s.CritChance)}%");
+                $"Potency: {UiText.Num(s.Potency)}%\n" +
+                $"Support Power: {UiText.Num(s.SupportPower)}\n" +
+                $"Healing Received: +{UiText.Num(s.HealingReceived)}%\n" +
+                $"MP Regen: {UiText.Num(s.MpRegen)} / turn\n" +
+                $"Gear Crit Chance: {UiText.Num(s.CritChance)}%");
 
-            var weapon = unit.EquippedWeapon;
-            SetText(_weaponNameLabel, weapon != null ? weapon.Name : "No weapon");
-            SetText(_weaponDetailsLabel, weapon != null ? ItemDescriber.Describe(weapon, s) : "");
+            var weapon = unit.MainHand;
+            var offHand = unit.OffHand;
+            bool twoHanded = weapon != null && weapon.Hands == HandUse.TwoHanded;
+
+            if (_offHandNameLabel != null)
+            {
+                SetText(_weaponNameLabel, weapon != null ? weapon.Name : "No weapon");
+                SetText(_weaponDetailsLabel, weapon != null ? ItemDescriber.Describe(weapon, s) : "");
+                SetText(_offHandNameLabel, offHand != null ? offHand.Name : twoHanded ? "(Two-handed)" : "Off hand empty");
+                SetText(_offHandDetailsLabel, offHand != null ? ItemDescriber.Describe(offHand, s) : "");
+            }
+            else
+            {
+                SetText(_weaponNameLabel, weapon != null
+                    ? (offHand != null ? $"{weapon.Name} + {offHand.Name}" : weapon.Name)
+                    : offHand != null ? offHand.Name : "No weapon");
+                string details = weapon != null ? "<b>Main hand</b>\n" + ItemDescriber.Describe(weapon, s) : "";
+                if (offHand != null)
+                    details += (details.Length > 0 ? "\n\n" : "") + "<b>Off hand</b>\n" + ItemDescriber.Describe(offHand, s);
+                SetText(_weaponDetailsLabel, details);
+            }
 
             var armor = s.EquippedArmor;
             SetText(_armorNameLabel, armor != null ? armor.Name : "No armor");

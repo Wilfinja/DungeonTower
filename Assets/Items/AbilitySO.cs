@@ -24,13 +24,25 @@ namespace DungeonTower.Items
         [SerializeField] private string _abilityName;
         [SerializeField] private EffectKind _effectKind = EffectKind.Damage;
 
+        [Header("Scaling - what powers this ability (Damage attack power / Heal bonus)")]
+        [Tooltip("Each entry adds Weight x that stat's power: Body = Physical Attack, Mind = Magic Attack, Spirit = Support Power. Guide: a pure one-stat ability totals about 1.0, a hybrid spread over two or more stats about 1.2. Leave EMPTY to use the old Kind + Damage Multiplier (damage) or Heal Support Multiplier (heal) instead.")]
+        [SerializeField] private List<StatWeight> _statWeights = new List<StatWeight>();
+        [Tooltip("Calculated from the list above - anything typed here is overwritten.")]
+        [SerializeField, AutoField] private string _scalingSummary;
+
         [Header("Damage (EffectKind = Damage)")]
+        [Tooltip("Which DEFENSE this hits: Physical = Physical Defense, Magical = Magic Defense. With an empty Stat Weights list it also chooses the stat (Physical = Body, Magical = Mind).")]
         [SerializeField] private AttackKind _kind;
+        [Tooltip("LEGACY: only used while Stat Weights is empty. Tip: right-click this asset's component header > 'Convert legacy fields to Stat Weights'.")]
         [SerializeField, Min(0f)] private float _damageMultiplier = 1.0f;
+        [Tooltip("Extra crit chance in percent while using this ability. A dagger might be 15, a greatsword 0. Gear crit adds on top.")]
+        [SerializeField, Range(0f, 100f)] private float _critChance = 5f;
 
         [Header("Heal (EffectKind = Heal)")]
         [SerializeField, Min(0)] private int _healHp;
         [SerializeField, Min(0)] private int _healMp;
+        [Tooltip("LEGACY: Support Power x this is added to Heal HP, but only while Stat Weights is empty. 0 = flat heal, which is what potions should use. Prefer a Spirit entry in Stat Weights.")]
+        [SerializeField, Min(0f)] private float _healSupportMultiplier;
 
         [Header("Buff (EffectKind = Buff) — permanent for the battle")]
         [SerializeField] private DerivedStatBonus _bonus;
@@ -92,6 +104,13 @@ namespace DungeonTower.Items
         public EffectKind EffectKind => _effectKind;
         public AttackKind Kind => _kind;
         public float DamageMultiplier => _damageMultiplier;
+        public float CritChance => _critChance;
+        public float HealSupportMultiplier => _healSupportMultiplier;
+
+        // The authored weights, or - when none are authored - the single entry
+        // the legacy fields imply, so old assets keep behaving exactly as before.
+        public IReadOnlyList<StatWeight> Scaling
+            => _statWeights != null && _statWeights.Count > 0 ? _statWeights : LegacyScaling();
         public int HealHp => _healHp;
         public int HealMp => _healMp;
         public DerivedStatBonus Bonus => _bonus;
@@ -122,5 +141,78 @@ namespace DungeonTower.Items
         public bool EndsIfOwnerMoves => _endsIfOwnerMoves;
         public bool SummonBlocksMovement => _summonBlocksMovement;
         public bool SummonBlocksLineOfSight => _summonBlocksLineOfSight;
+
+        // ---- scaling helpers --------------------------------------------------
+
+        [NonSerialized] private StatWeight[] _legacyScaling;
+
+        private IReadOnlyList<StatWeight> LegacyScaling()
+        {
+            if (_legacyScaling != null) return _legacyScaling;
+
+            switch (_effectKind)
+            {
+                case EffectKind.Damage:
+                    _legacyScaling = _damageMultiplier > 0f
+                        ? new[] { new StatWeight(_kind == AttackKind.Physical ? PrimaryStat.Body : PrimaryStat.Mind, _damageMultiplier) }
+                        : Array.Empty<StatWeight>();
+                    break;
+
+                case EffectKind.Heal:
+                    _legacyScaling = _healSupportMultiplier > 0f
+                        ? new[] { new StatWeight(PrimaryStat.Spirit, _healSupportMultiplier) }
+                        : Array.Empty<StatWeight>();
+                    break;
+
+                default:
+                    _legacyScaling = Array.Empty<StatWeight>();
+                    break;
+            }
+            return _legacyScaling;
+        }
+
+        private void OnValidate()
+        {
+            _legacyScaling = null;
+
+            if (_statWeights == null) _statWeights = new List<StatWeight>();
+            for (int i = 0; i < _statWeights.Count; i++)
+            {
+                var w = _statWeights[i];
+                if (w.Weight < 0f)
+                {
+                    w.Weight = 0f;
+                    _statWeights[i] = w;
+                }
+            }
+
+            string summary = AbilityScaling.Summarize(this);
+            if (_statWeights.Count == 0 && AbilityScaling.HasScaling(this)) summary += "   [from legacy fields]";
+            _scalingSummary = summary;
+        }
+
+        [ContextMenu("Convert legacy fields to Stat Weights")]
+        private void ConvertLegacyToWeights()
+        {
+            if (_statWeights.Count > 0)
+            {
+                Debug.Log($"{name}: already uses Stat Weights - nothing to convert.", this);
+                return;
+            }
+
+            var legacy = LegacyScaling();
+            if (legacy.Count == 0)
+            {
+                Debug.Log($"{name}: no legacy scaling to convert.", this);
+                return;
+            }
+
+            foreach (var w in legacy) _statWeights.Add(w);
+            OnValidate();
+#if UNITY_EDITOR
+            UnityEditor.EditorUtility.SetDirty(this);
+#endif
+            Debug.Log($"{name}: converted to Stat Weights ({_scalingSummary}).", this);
+        }
     }
 }

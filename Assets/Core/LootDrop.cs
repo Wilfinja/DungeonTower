@@ -39,6 +39,11 @@ namespace DungeonTower.Core
         public IReadOnlyDictionary<IPotion, int> Potions => _potions;
         public IReadOnlyDictionary<IScroll, int> Scrolls => _scrolls;
 
+        public void AddWeapon(IWeapon weapon)
+        {
+            if (weapon != null) _weapons.Add(weapon);
+        }
+
         public void AddPotion(IPotion potion, int count = 1)
         {
             if (potion == null || count <= 0) return;

@@ -73,6 +73,8 @@ namespace DungeonTower.UI
             [Min(0)] public int Mind;
             [Min(0)] public int Spirit;
             public WeaponSO Weapon;
+            [Tooltip("Optional: shield, focus, or a second one-handed weapon.")]
+            public WeaponSO OffHand;
             public ArmorSO Armor;
             [Tooltip("Fills belt slots in order; repeat an asset to stack it (see LoadBeltFromLists).")]
             public List<PotionSO> BeltPotions = new List<PotionSO>();
@@ -82,7 +84,7 @@ namespace DungeonTower.UI
             // heroes one way whether they came from creation or from here.
             public HeroSetup ToSetup()
             {
-                var setup = new HeroSetup { Name = Name, Body = Body, Mind = Mind, Spirit = Spirit, Weapon = Weapon, Armor = Armor };
+                var setup = new HeroSetup { Name = Name, Body = Body, Mind = Mind, Spirit = Spirit, Weapon = Weapon, OffHand = OffHand, Armor = Armor };
                 foreach (var potion in BeltPotions) if (potion != null) setup.BeltPotions.Add(potion);
                 foreach (var scroll in BeltScrolls) if (scroll != null) setup.BeltScrolls.Add(scroll);
                 return setup;
@@ -436,8 +438,10 @@ namespace DungeonTower.UI
             var hero = new CombatUnit(setup.Name, Faction.Player,
                 NewHeroStats(setup.Body, setup.Mind, setup.Spirit), position, _playerVisionRadius);
 
-            if (setup.Weapon != null && !hero.TryEquip(setup.Weapon))
-                Debug.LogWarning($"{setup.Name} can't equip {setup.Weapon.Name} — stat requirement not met.");
+            if (setup.Weapon != null && !hero.TryEquip(setup.Weapon, HandSlot.Main, out _))
+                Debug.LogWarning($"{setup.Name} can't equip {setup.Weapon.Name} in the main hand.");
+            if (setup.OffHand != null && !hero.TryEquip(setup.OffHand, HandSlot.Off, out _))
+                Debug.LogWarning($"{setup.Name} can't equip {setup.OffHand.Name} in the off hand.");
             if (setup.Armor != null && !hero.Stats.TryEquipArmor(setup.Armor))
                 Debug.LogWarning($"{setup.Name} can't equip {setup.Armor.Name} — stat requirement not met.");
 
@@ -536,7 +540,8 @@ namespace DungeonTower.UI
     enemySO.DetectionRadius, enemySO.AlertRadius,
     enemySO.TargetingStrategy, enemySO.TargetingRange,
     enemySO.SupportTargetingStrategy, enemySO.SupportHealThreshold);
-            unit.TryEquip(enemySO.Weapon);
+            unit.TryEquip(enemySO.Weapon, HandSlot.Main, out _);
+            if (enemySO.OffHand != null) unit.TryEquip(enemySO.OffHand, HandSlot.Off, out _);
             unit.Stats.TryEquipArmor(enemySO.Armor);
             unit.RestoreToFull();   // armor may add HP/MP — start at the real max
             _enemyKits[unit] = enemySO;
@@ -637,6 +642,11 @@ namespace DungeonTower.UI
                 TickBattlefieldObjects();
             }
             unit.TickCooldowns();
+            if (IsInCombat())
+            {
+                int regenMp = unit.RegenMp();
+                if (regenMp > 0) Debug.Log($"{unit.DisplayName} recovers {regenMp} MP.");
+            }
             var startTick = unit.Status.OnTurnStart();
             foreach (var line in startTick.Log) Debug.Log(line);
             _unitViews[unit].Refresh();
@@ -669,7 +679,7 @@ namespace DungeonTower.UI
                 RefreshLootAvailability(unit);
                 RefreshDescendAvailability();
 
-                if (unit.EquippedWeapon != null) _abilityBar.Show(unit.EquippedWeapon, unit.GetRemainingCooldown,
+                if (unit.WeaponAbilities.Count > 0) _abilityBar.Show(unit.WeaponAbilities, unit.GetRemainingCooldown,
     a => SilenceRules.IsBlocked(unit, a, AbilitySource.Weapon) || !unit.CanAfford(a));
                 else _abilityBar.ShowMoveOnly();
 
@@ -890,10 +900,10 @@ namespace DungeonTower.UI
 
             if (_battle == null || _battle.Outcome != BattleOutcome.InProgress) return;
             var unit = _battle.CurrentUnit;
-            if (unit.Faction != Faction.Player || unit.EquippedWeapon == null) return;
-            if (index < 0 || index >= unit.EquippedWeapon.Abilities.Count) return;
+            if (unit.Faction != Faction.Player) return;
+            if (index < 0 || index >= unit.WeaponAbilities.Count) return;
 
-            var ability = unit.EquippedWeapon.Abilities[index];
+            var ability = unit.WeaponAbilities[index];
             if (unit.IsOnCooldown(ability))
             {
                 Debug.Log($"{ability.Name} is on cooldown ({unit.GetRemainingCooldown(ability)} turn(s) left).");
@@ -926,15 +936,35 @@ namespace DungeonTower.UI
             var unit = ResolveEquipTarget(targetIndex);
             if (unit == null) return;
 
-            if (!unit.TryEquip(weapon, out var previous))
+            // Where it goes: off-hand gear to the off hand, two-handers to the
+            // main hand (clearing the off hand), one-handers fill an empty hand
+            // first and otherwise replace the main hand.
+            HandSlot slot;
+            if (weapon.Hands == HandUse.OffHand) slot = HandSlot.Off;
+            else if (weapon.Hands == HandUse.TwoHanded || unit.MainHand == null) slot = HandSlot.Main;
+            else if (unit.OffHand == null && unit.MainHand.Hands != HandUse.TwoHanded) slot = HandSlot.Off;
+            else slot = HandSlot.Main;
+
+            bool clearOff = weapon.Hands == HandUse.TwoHanded;
+            if (!unit.CanEquipTo(weapon, slot, out var why, clearOff))
             {
-                Debug.Log($"{unit.DisplayName} cannot equip {weapon.Name} — stat requirement not met");
+                Debug.Log($"{unit.DisplayName} cannot equip {weapon.Name} — {why}");
                 return;
             }
 
+            var displaced = new List<IWeapon>();
+            if (clearOff)
+            {
+                var off = unit.Unequip(HandSlot.Off);
+                if (off != null) displaced.Add(off);
+            }
+            unit.TryEquip(weapon, slot, out var previous);
+            if (previous != null) displaced.Add(previous);
+
             _inventory.RemoveWeapon(weapon);
-            if (previous != null) _inventory.AddWeapon(previous);
-            Debug.Log($"{unit.DisplayName} equips {weapon.Name}" + (previous != null ? $" (was {previous.Name})" : ""));
+            foreach (var item in displaced) _inventory.AddWeapon(item);
+            Debug.Log($"{unit.DisplayName} equips {weapon.Name}" +
+                (displaced.Count > 0 ? $" (stowed {string.Join(", ", displaced.Select(w => w.Name))})" : ""));
 
             ResolveEquipCost();
         }
@@ -1004,7 +1034,7 @@ namespace DungeonTower.UI
             switch (ability.EffectKind)
             {
                 case EffectKind.Heal:
-                    unit.Heal(ability.HealHp);
+                    unit.ReceiveHeal(HealAmount(unit, ability));
                     unit.RestoreMp(ability.HealMp);
                     break;
                 case EffectKind.Buff:
@@ -1097,7 +1127,7 @@ namespace DungeonTower.UI
         {
             if (unit == null || unit.Faction != Faction.Player) return;
 
-            if (unit.EquippedWeapon != null) _abilityBar.Show(unit.EquippedWeapon, unit.GetRemainingCooldown,
+            if (unit.WeaponAbilities.Count > 0) _abilityBar.Show(unit.WeaponAbilities, unit.GetRemainingCooldown,
     a => SilenceRules.IsBlocked(unit, a, AbilitySource.Weapon) || !unit.CanAfford(a));
             else _abilityBar.ShowMoveOnly();
 
@@ -1624,13 +1654,12 @@ namespace DungeonTower.UI
         {
             ability = null;
             target = null;
-            var weapon = enemy.EquippedWeapon;
-            if (weapon == null) return false;
+            if (enemy.WeaponAbilities.Count == 0) return false;
 
             var allies = AlliesWithinRange(enemy, enemy.TargetingRange);
             if (allies.Count == 0) return false;
 
-            foreach (var candidate in weapon.Abilities)
+            foreach (var candidate in enemy.WeaponAbilities)
             {
                 if (enemy.IsOnCooldown(candidate)) continue;
                 if (SilenceRules.IsBlocked(enemy, candidate, AbilitySource.Weapon)) continue;
@@ -1799,12 +1828,13 @@ namespace DungeonTower.UI
 
                 case EffectKind.Heal:
                     int hpBeforeHeal = target.CurrentHp;
-                    target.Heal(ability.HealHp);
+                    int healAmount = HealAmount(attacker, ability);
+                    target.ReceiveHeal(healAmount);
                     target.RestoreMp(ability.HealMp);
                     _unitViews[target].Refresh();
                     if (_recordingHits)
                         _hits.Add(HitRecord.Heal(_unitViews[target], target.Position, target.CurrentHp - hpBeforeHeal));
-                    Debug.Log($"{attacker.DisplayName} uses {ability.Name} on {target.DisplayName}, restoring {ability.HealHp} HP / {ability.HealMp} MP.");
+                    Debug.Log($"{attacker.DisplayName} uses {ability.Name} on {target.DisplayName}, restoring {target.CurrentHp - hpBeforeHeal} HP / {ability.HealMp} MP.");
                     break;
 
                 case EffectKind.Buff:
@@ -1826,6 +1856,13 @@ namespace DungeonTower.UI
             ApplyAbilityStatuses(attacker, target, ability);   // <-- new, after the switch's closing brace
             ApplyPositionalEffects(attacker, target, ability);
         }
+
+        // Authored flat HP plus the ability's stat-weighted power (a potion has
+        // no weights, so it stays flat; a mana-only ability has neither, so it
+        // restores no HP). The TARGET's healing-received bonus is applied
+        // afterwards, in ReceiveHeal.
+        private static int HealAmount(CombatUnit caster, IAbility ability)
+            => Mathf.Max(0, ability.HealHp + Mathf.RoundToInt(AbilityScaling.Total(caster.Stats, ability)));
 
         private void ApplyPositionalEffects(CombatUnit attacker, CombatUnit target, IAbility ability)
         {
@@ -1989,13 +2026,11 @@ namespace DungeonTower.UI
 
         // SIMPLIFICATION, flagged deliberately: this does NOT go through
         // AttackResolver — an inanimate object has no defense stat or
-        // crit chance to resolve against. Damage is just Attack x
-        // Multiplier, rounded, minimum 1.
+        // crit chance to resolve against. Damage is just the ability's
+        // stat-weighted power (AbilityScaling), rounded, minimum 1.
         private void DamageBattlefieldObject(CombatUnit attacker, BattlefieldObject obj, IAbility ability)
         {
-            float attackStat = ability.Kind == AttackKind.Physical
-                ? attacker.Stats.PhysicalAttack : attacker.Stats.MagicAttack;
-            int damage = Math.Max(1, (int)Math.Round(attackStat * ability.DamageMultiplier));
+            int damage = Math.Max(1, (int)Math.Round(AbilityScaling.Total(attacker.Stats, ability)));
 
             obj.CurrentHp -= damage;
             Debug.Log($"{attacker.DisplayName} hits {obj.Name} for {damage}.");
@@ -2172,14 +2207,19 @@ namespace DungeonTower.UI
 
             // A natural weapon/armor (claws, thick hide, etc.) never
             // shows up as loot — only real gear does.
-            var droppedWeapon = unit.EquippedWeapon != null && unit.EquippedWeapon.DropsOnDeath
-                ? unit.EquippedWeapon : null;
+            var droppedWeapon = unit.MainHand != null && unit.MainHand.DropsOnDeath
+                ? unit.MainHand : null;
+            var droppedOffHand = unit.OffHand != null && unit.OffHand.DropsOnDeath
+                ? unit.OffHand : null;
             var droppedArmor = unit.Stats.EquippedArmor != null && unit.Stats.EquippedArmor.DropsOnDeath
                 ? unit.Stats.EquippedArmor : null;
 
             LootDrop pile = null;
-            if (droppedWeapon != null || droppedArmor != null)
+            if (droppedWeapon != null || droppedOffHand != null || droppedArmor != null)
+            {
                 pile = new LootDrop(unit.Position, droppedWeapon, droppedArmor);
+                pile.AddWeapon(droppedOffHand);
+            }
 
             // Enemies only: roll their extra consumable drop and pay out
             // their XP. (A dead hero has no entry in _enemyKits.)
@@ -2489,10 +2529,10 @@ namespace DungeonTower.UI
         // one yet.
         private IAbility GetSelectedWeaponAbility(CombatUnit unit)
         {
-            var weapon = unit.EquippedWeapon;
-            if (weapon == null || weapon.Abilities.Count == 0) return null;
-            int index = Mathf.Clamp(_selectedAbilityIndex, 0, weapon.Abilities.Count - 1);
-            return weapon.Abilities[index];
+            var abilities = unit.WeaponAbilities;
+            if (abilities.Count == 0) return null;
+            int index = Mathf.Clamp(_selectedAbilityIndex, 0, abilities.Count - 1);
+            return abilities[index];
         }
 
         // Only weapon abilities that DON'T target allies are offense candidates
@@ -2501,10 +2541,7 @@ namespace DungeonTower.UI
         // pass in TryPickSupportAction.
         private IAbility GetEnemyOffenseAbility(CombatUnit enemy)
         {
-            var weapon = enemy.EquippedWeapon;
-            if (weapon == null) return null;
-
-            foreach (var candidate in weapon.Abilities)
+            foreach (var candidate in enemy.WeaponAbilities)
                 if (!enemy.IsOnCooldown(candidate)
                     && !SilenceRules.IsBlocked(enemy, candidate, AbilitySource.Weapon)
                     && enemy.CanAfford(candidate)

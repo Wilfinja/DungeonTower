@@ -60,6 +60,8 @@ namespace DungeonTower.UI
         [Header("Gear")]
         [SerializeField] private TextMeshProUGUI _budgetLabel;
         [SerializeField] private TMP_Dropdown _weaponDropdown;
+        [Tooltip("Optional. Off hand: shields, focuses, or a second one-handed weapon.")]
+        [SerializeField] private TMP_Dropdown _offHandDropdown;
         [SerializeField] private TMP_Dropdown _armorDropdown;
         [Tooltip("One dropdown per belt slot to fill (potions and scrolls).")]
         [SerializeField] private List<TMP_Dropdown> _beltDropdowns = new List<TMP_Dropdown>();
@@ -83,8 +85,8 @@ namespace DungeonTower.UI
             public string Name;
             public int Cost;
             public object Item;
-            public PrimaryStat Stat;
-            public int Required;
+            public IReadOnlyList<StatRequirement> Reqs;   // gear: every entry must be met
+            public HandUse Hands;                         // weapons only
             public bool Gated;
         }
 
@@ -94,7 +96,8 @@ namespace DungeonTower.UI
         {
             public string Name;
             public int Body, Mind, Spirit;   // creation points spent
-            public int Weapon = -1;
+            public int Weapon = -1;    // main hand
+            public int OffHand = -1;
             public int Armor = -1;
             public readonly int[] Belt;
 
@@ -132,7 +135,8 @@ namespace DungeonTower.UI
             public StatBlock Stats => new StatBlock(Value(PrimaryStat.Body), Value(PrimaryStat.Mind), Value(PrimaryStat.Spirit));
         }
 
-        private readonly List<Option> _weaponOptions = new List<Option>();
+        private readonly List<Option> _weaponOptions = new List<Option>();    // main hand
+        private readonly List<Option> _offHandOptions = new List<Option>();
         private readonly List<Option> _armorOptions = new List<Option>();
         private readonly List<Option> _beltOptions = new List<Option>();
         private readonly List<Draft> _drafts = new List<Draft>();
@@ -168,6 +172,8 @@ namespace DungeonTower.UI
 
             if (_weaponDropdown != null)
                 _weaponDropdown.onValueChanged.AddListener(v => PickGear(_weaponOptions, d => d.Weapon, (d, i) => d.Weapon = i, v - 1));
+            if (_offHandDropdown != null)
+                _offHandDropdown.onValueChanged.AddListener(v => PickGear(_offHandOptions, d => d.OffHand, (d, i) => d.OffHand = i, v - 1));
             if (_armorDropdown != null)
                 _armorDropdown.onValueChanged.AddListener(v => PickGear(_armorOptions, d => d.Armor, (d, i) => d.Armor = i, v - 1));
             for (int i = 0; i < _beltDropdowns.Count; i++)
@@ -191,25 +197,32 @@ namespace DungeonTower.UI
             }
 
             foreach (var e in _kit.Weapons)
-                if (e != null && e.Item != null)
-                    _weaponOptions.Add(new Option { Name = e.Item.Name, Cost = e.Cost, Item = e.Item,
-                        Stat = e.Item.RequiredStat, Required = e.Item.RequiredStatValue, Gated = true });
+            {
+                if (e == null || e.Item == null) continue;
+                var option = new Option { Name = e.Item.Name, Cost = e.Cost, Item = e.Item,
+                    Reqs = e.Item.Requirements, Hands = e.Item.Hands, Gated = true };
+                if (option.Hands != HandUse.OffHand) _weaponOptions.Add(option);
+                if (option.Hands != HandUse.TwoHanded) _offHandOptions.Add(option);
+            }
 
             foreach (var e in _kit.Armors)
                 if (e != null && e.Item != null)
                     _armorOptions.Add(new Option { Name = e.Item.Name, Cost = e.Cost, Item = e.Item,
-                        Stat = e.Item.RequiredStat, Required = e.Item.RequiredStatValue, Gated = true });
+                        Reqs = Single(e.Item.RequiredStat, e.Item.RequiredStatValue), Gated = true });
 
             foreach (var e in _kit.Potions)
                 if (e != null && e.Item != null)
                     _beltOptions.Add(new Option { Name = e.Item.Name, Cost = e.Cost, Item = e.Item,
-                        Stat = e.Item.RequiredStat, Required = e.Item.RequiredStatValue, Gated = false });
+                        Reqs = Single(e.Item.RequiredStat, e.Item.RequiredStatValue), Gated = false });
 
             foreach (var e in _kit.Scrolls)
                 if (e != null && e.Item != null)
                     _beltOptions.Add(new Option { Name = e.Item.Name, Cost = e.Cost, Item = e.Item,
-                        Stat = e.Item.RequiredStat, Required = e.Item.RequiredStatValue, Gated = false });
+                        Reqs = Single(e.Item.RequiredStat, e.Item.RequiredStatValue), Gated = false });
         }
+
+        private static StatRequirement[] Single(PrimaryStat stat, int value)
+            => new[] { new StatRequirement(stat, value) };
 
         // ---- Public API ----------------------------------------------------------
 
@@ -257,12 +270,17 @@ namespace DungeonTower.UI
             // Lowering a stat can strip gear the hero no longer qualifies for.
             if (d.Weapon >= 0 && IsUnmet(_weaponOptions[d.Weapon], d))
             {
-                Say($"{_weaponOptions[d.Weapon].Name} was removed — it needs {_weaponOptions[d.Weapon].Stat} {_weaponOptions[d.Weapon].Required}.");
+                Say($"{_weaponOptions[d.Weapon].Name} was removed — it needs {ReqText(_weaponOptions[d.Weapon])}.");
                 d.Weapon = -1;
+            }
+            if (d.OffHand >= 0 && IsUnmet(_offHandOptions[d.OffHand], d))
+            {
+                Say($"{_offHandOptions[d.OffHand].Name} was removed — it needs {ReqText(_offHandOptions[d.OffHand])}.");
+                d.OffHand = -1;
             }
             if (d.Armor >= 0 && IsUnmet(_armorOptions[d.Armor], d))
             {
-                Say($"{_armorOptions[d.Armor].Name} was removed — it needs {_armorOptions[d.Armor].Stat} {_armorOptions[d.Armor].Required}.");
+                Say($"{_armorOptions[d.Armor].Name} was removed — it needs {ReqText(_armorOptions[d.Armor])}.");
                 d.Armor = -1;
             }
 
@@ -284,7 +302,14 @@ namespace DungeonTower.UI
 
                 if (IsUnmet(option, d))
                 {
-                    Say($"{option.Name} needs {option.Stat} {option.Required}.");
+                    Say($"{option.Name} needs {ReqText(option)}.");
+                    RefreshAll();
+                    return;
+                }
+                if (ReferenceEquals(options, _offHandOptions) && d.Weapon >= 0
+                    && _weaponOptions[d.Weapon].Hands == HandUse.TwoHanded)
+                {
+                    Say($"{_weaponOptions[d.Weapon].Name} is two-handed, so the off hand is taken.");
                     RefreshAll();
                     return;
                 }
@@ -298,15 +323,40 @@ namespace DungeonTower.UI
 
             set(d, newIndex);
             Say(null);
+
+            // A two-handed main weapon takes the off hand with it.
+            if (ReferenceEquals(options, _weaponOptions) && newIndex >= 0
+                && options[newIndex].Hands == HandUse.TwoHanded && d.OffHand >= 0)
+            {
+                Say($"{options[newIndex].Name} is two-handed — the off hand was cleared.");
+                d.OffHand = -1;
+            }
             RefreshAll();
         }
 
-        private static bool IsUnmet(Option option, Draft d) => option.Gated && d.Value(option.Stat) < option.Required;
+        private static bool IsUnmet(Option option, Draft d)
+        {
+            if (!option.Gated || option.Reqs == null) return false;
+            foreach (var r in option.Reqs)
+                if (d.Value(r.Stat) < r.Value) return true;
+            return false;
+        }
+
+        // "Body 4, Spirit 4" (zero-value entries skipped).
+        private static string ReqText(Option option)
+        {
+            var parts = new List<string>();
+            if (option.Reqs != null)
+                foreach (var r in option.Reqs)
+                    if (r.Value > 0) parts.Add($"{r.Stat} {r.Value}");
+            return string.Join(", ", parts);
+        }
 
         private int GearCost(Draft d)
         {
             int cost = 0;
             if (d.Weapon >= 0) cost += _weaponOptions[d.Weapon].Cost;
+            if (d.OffHand >= 0) cost += _offHandOptions[d.OffHand].Cost;
             if (d.Armor >= 0) cost += _armorOptions[d.Armor].Cost;
             foreach (int b in d.Belt) if (b >= 0) cost += _beltOptions[b].Cost;
             return cost;
@@ -327,6 +377,7 @@ namespace DungeonTower.UI
                     Mind = d.Mind,
                     Spirit = d.Spirit,
                     Weapon = d.Weapon >= 0 ? (IWeapon)_weaponOptions[d.Weapon].Item : null,
+                    OffHand = d.OffHand >= 0 ? (IWeapon)_offHandOptions[d.OffHand].Item : null,
                     Armor = d.Armor >= 0 ? (IArmor)_armorOptions[d.Armor].Item : null
                 };
 
@@ -382,6 +433,7 @@ namespace DungeonTower.UI
             }
 
             FillDropdown(_weaponDropdown, _weaponOptions, d, d.Weapon, "No weapon");
+            FillDropdown(_offHandDropdown, _offHandOptions, d, d.OffHand, "Empty off hand");
             FillDropdown(_armorDropdown, _armorOptions, d, d.Armor, "No armor");
             for (int i = 0; i < _beltDropdowns.Count; i++)
                 FillDropdown(_beltDropdowns[i], _beltOptions, d, d.Belt[i], "Empty belt slot");
@@ -425,15 +477,18 @@ namespace DungeonTower.UI
         private static string LabelFor(Option option, Draft d)
         {
             string text = option.Cost > 0 ? $"{option.Name}  ({option.Cost} pt)" : option.Name;
+            if (option.Hands == HandUse.TwoHanded) text += "  [2H]";
+            else if (option.Hands == HandUse.OffHand) text += "  [off-hand]";
 
-            if (option.Required > 0)
+            string req = ReqText(option);
+            if (req.Length > 0)
             {
                 if (option.Gated)
                     text += IsUnmet(option, d)
-                        ? "  " + UiText.Unmet($"needs {option.Stat} {option.Required}")
-                        : $"  (needs {option.Stat} {option.Required})";
+                        ? "  " + UiText.Unmet($"needs {req}")
+                        : $"  (needs {req})";
                 else
-                    text += $"  (use: {option.Stat} {option.Required})";
+                    text += $"  (use: {req})";
             }
             return text;
         }

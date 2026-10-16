@@ -56,32 +56,49 @@ namespace DungeonTower.Combat
         // --- Application ---
 
         /// <summary>
-        /// Tries to apply a status to the owner. Two rolls happen first,
-        /// in order: the application's own Chance (on-hit procs), then —
-        /// for Harmful statuses only, and never when the owner applies
-        /// it to itself — the owner's StatusResist. Pass a null rng to
-        /// skip both rolls and apply deterministically (tests, scripted
-        /// effects).
+        /// Tries to apply a status to the owner with ONE roll:
+        ///   attempt chance = the application's Chance + the source's Potency (max 100)
+        ///   final chance   = attempt chance - the owner's StatusResist
+        ///                    (Harmful statuses only, never self-applied; never below
+        ///                    MinStatusChance, or the attempt chance if that's lower)
+        /// A roll above the attempt chance is ProcFailed; between the final and
+        /// attempt chance it's Resisted. A successful application is also scaled
+        /// by the source's Potency: stacks and magnitude (Burn %, Ward pool, Mark %,
+        /// Regeneration stacks...) grow by that percent. Pass a null rng to skip the
+        /// roll AND the potency scaling and apply exactly as authored (tests,
+        /// scripted effects, the debug inspector).
         /// </summary>
         public StatusApplyResult Apply(StatusApplication app, CombatUnit source, Random rng)
         {
             var rule = StatusRules.Get(app.Id);
 
-            if (rng != null && app.EffectiveChance < 100f
-                && rng.NextDouble() * 100.0 >= app.EffectiveChance)
-                return new StatusApplyResult(StatusApplyOutcome.ProcFailed, null);
+            float potency = rng != null && source != null ? source.Stats.Potency : 0f;
+            float potencyScale = 1f + potency / 100f;
 
-            if (rng != null && rule.Polarity == StatusPolarity.Harmful && source != _owner
-                && rng.NextDouble() * 100.0 < _owner.Stats.StatusResist)
-                return new StatusApplyResult(StatusApplyOutcome.Resisted, null);
+            if (rng != null)
+            {
+                bool resistable = rule.Polarity == StatusPolarity.Harmful && source != _owner;
+                float resist = resistable ? _owner.Stats.StatusResist : 0f;
 
-            int stacks = CapStacks(rule, app.EffectiveStacks);
+                float attemptChance = Math.Min(100f, app.EffectiveChance + potency);
+                float floor = Math.Min(attemptChance, MinStatusChance);
+                float finalChance = Math.Max(floor, attemptChance - resist);
+
+                double roll = rng.NextDouble() * 100.0;
+                if (roll >= attemptChance)
+                    return new StatusApplyResult(StatusApplyOutcome.ProcFailed, null);
+                if (roll >= finalChance)
+                    return new StatusApplyResult(StatusApplyOutcome.Resisted, null);
+            }
+
+            int stacks = CapStacks(rule, ScaleCount(app.EffectiveStacks, potencyScale));
+            float magnitude = app.Magnitude * potencyScale;
             int duration = rule.UsesDuration ? app.EffectiveDuration(rule) : 0;
 
             StatusApplyOutcome outcome;
             if (!_active.TryGetValue(app.Id, out var instance))
             {
-                instance = new StatusEffectInstance(app.Id, stacks, duration, app.Magnitude, app.StatBonus, source);
+                instance = new StatusEffectInstance(app.Id, stacks, duration, magnitude, app.StatBonus, source);
                 _active[app.Id] = instance;
                 outcome = StatusApplyOutcome.Applied;
             }
@@ -92,17 +109,17 @@ namespace DungeonTower.Combat
                 {
                     case ReapplyMode.AddStacks:
                         instance.Stacks = CapStacks(rule, instance.Stacks + stacks);
-                        instance.Magnitude = Math.Max(instance.Magnitude, app.Magnitude);
+                        instance.Magnitude = Math.Max(instance.Magnitude, magnitude);
                         outcome = StatusApplyOutcome.Stacked;
                         break;
 
                     case ReapplyMode.KeepStronger:
-                        if (app.Magnitude > instance.Magnitude) instance.Magnitude = app.Magnitude;
+                        if (magnitude > instance.Magnitude) instance.Magnitude = magnitude;
                         outcome = StatusApplyOutcome.Refreshed;
                         break;
 
                     case ReapplyMode.Accelerate:
-                        instance.Magnitude += app.Magnitude;
+                        instance.Magnitude += magnitude;
                         instance.Duration = Math.Max(1, instance.Duration + rule.ReapplyDurationShift);
                         durationHandled = true;
                         outcome = StatusApplyOutcome.Stacked;
@@ -123,6 +140,12 @@ namespace DungeonTower.Combat
             RefreshBonuses();
             return new StatusApplyResult(outcome, instance);
         }
+
+        // A status can never be made completely un-landable by resist alone.
+        public const float MinStatusChance = 5f;
+
+        private static int ScaleCount(int count, float scale)
+            => Math.Max(count, (int)Math.Round(count * scale, MidpointRounding.AwayFromZero));
 
         private static int CapStacks(StatusRule rule, int stacks)
             => rule.MaxStacks > 0 ? Math.Min(stacks, rule.MaxStacks) : stacks;

@@ -19,23 +19,27 @@ namespace DungeonTower.UI
             switch (stat)
             {
                 case PrimaryStat.Body:
-                    return "<b>Body</b>\nToughness and raw strength.\n"
+                    return "<b>Body</b>\nToughness and raw strength. Powers martial (physical) abilities.\n"
                         + $"+{UiText.Num(DerivedStatFormulas.HpPerBody)} Max HP per point\n"
                         + $"+{UiText.Num(DerivedStatFormulas.PhysicalAttackPerBody)} Physical Attack per point\n"
-                        + $"+{UiText.Num(DerivedStatFormulas.PhysicalDefensePerBody)} Physical Defense per point"
+                        + $"+{UiText.Num(DerivedStatFormulas.PhysicalDefensePerBody)} Physical Defense per point\n"
+                        + $"+{UiText.Num(DerivedStatFormulas.HealingReceivedPerBody)}% healing received per point\n"
+                        + $"{UiText.Num(DerivedStatFormulas.InitiativeWeightBody * 100f)}% of Initiative"
                         + (showCurrent
                             ? $"\n<i>Right now: {UiText.Num(points * DerivedStatFormulas.HpPerBody)} HP, "
                               + $"{UiText.Num(points * DerivedStatFormulas.PhysicalAttackPerBody)} Physical Attack, "
-                              + $"{UiText.Num(points * DerivedStatFormulas.PhysicalDefensePerBody)} Physical Defense</i>"
+                              + $"{UiText.Num(points * DerivedStatFormulas.PhysicalDefensePerBody)} Physical Defense, "
+                              + $"+{UiText.Num(points * DerivedStatFormulas.HealingReceivedPerBody)}% healing received</i>"
                             : "")
                         + "\nSome weapons and armor require a minimum Body.";
 
                 case PrimaryStat.Mind:
-                    return "<b>Mind</b>\nMagical power and focus.\n"
+                    return "<b>Mind</b>\nMagical power and focus. Powers magic abilities.\n"
                         + $"+{UiText.Num(DerivedStatFormulas.MpPerMind)} Max MP per point\n"
                         + $"+{UiText.Num(DerivedStatFormulas.MagicAttackPerMind)} Magic Attack per point\n"
                         + $"+{UiText.Num(DerivedStatFormulas.MagicDefensePerMind)} Magic Defense per point "
-                        + $"(never below {UiText.Num(DerivedStatFormulas.MagicDefenseFloor)})"
+                        + $"(never below {UiText.Num(DerivedStatFormulas.MagicDefenseFloor)})\n"
+                        + $"{UiText.Num(DerivedStatFormulas.InitiativeWeightMind * 100f)}% of Initiative"
                         + (showCurrent
                             ? $"\n<i>Right now: {UiText.Num(points * DerivedStatFormulas.MpPerMind)} MP, "
                               + $"{UiText.Num(points * DerivedStatFormulas.MagicAttackPerMind)} Magic Attack, "
@@ -44,17 +48,19 @@ namespace DungeonTower.UI
                         + "\nSome weapons, armor, and scrolls require a minimum Mind.";
 
                 case PrimaryStat.Spirit:
-                    return "<b>Spirit</b>\nSpeed, instinct, and willpower.\n"
-                        + $"+{UiText.Num(DerivedStatFormulas.InitiativePerSpirit)} Initiative per point (acts earlier in the turn order)\n"
-                        + $"Move Range: {UiText.Num(DerivedStatFormulas.MoveRangeBase)} tiles, +1 more per "
-                        + $"{UiText.Num(1f / DerivedStatFormulas.MoveRangePerSpirit)} points\n"
+                    return "<b>Spirit</b>\nWillpower and influence. Powers support abilities and statuses.\n"
                         + $"+{UiText.Num(DerivedStatFormulas.StatusResistPerSpirit)}% Status Resist per point "
                         + $"(max {UiText.Num(DerivedStatFormulas.StatusResistCap)}% from Spirit)\n"
-                        + $"+{UiText.Num(DerivedStatFormulas.CritPerSpirit)}% Crit Chance per point "
-                        + $"(max {UiText.Num(DerivedStatFormulas.CritCap)}% from Spirit)"
+                        + $"+{UiText.Num(DerivedStatFormulas.PotencyPerSpirit)}% Potency per point "
+                        + "(more likely to land statuses, and they hit harder)\n"
+                        + $"+{UiText.Num(DerivedStatFormulas.SupportPowerPerSpirit)} Support Power per point (healing)\n"
+                        + $"+1 MP per turn in combat for every {UiText.Num(1f / DerivedStatFormulas.MpRegenPerSpirit)} points\n"
+                        + $"{UiText.Num(DerivedStatFormulas.InitiativeWeightSpirit * 100f)}% of Initiative"
                         + (showCurrent
                             ? $"\n<i>Right now: {UiText.Num(System.Math.Min(DerivedStatFormulas.StatusResistCap, points * DerivedStatFormulas.StatusResistPerSpirit))}% Status Resist, "
-                              + $"{UiText.Num(System.Math.Min(DerivedStatFormulas.CritCap, points * DerivedStatFormulas.CritPerSpirit))}% Crit</i>"
+                              + $"{UiText.Num(points * DerivedStatFormulas.PotencyPerSpirit)}% Potency, "
+                              + $"{UiText.Num(points * DerivedStatFormulas.SupportPowerPerSpirit)} Support Power, "
+                              + $"{UiText.Num(points * DerivedStatFormulas.MpRegenPerSpirit)} MP regen</i>"
                             : "")
                         + "\nSome weapons and armor require a minimum Spirit.";
 

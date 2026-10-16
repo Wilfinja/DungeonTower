@@ -26,6 +26,7 @@ namespace DungeonTower.Core
         // yet, and nothing currently resets this between battles either,
         // since there's no "next battle" flow to reset it at — worth
         // revisiting once one exists.
+        private DerivedStatBonus _weaponBonus;
         private DerivedStatBonus _consumableBonus;
         private DerivedStatBonus _temporaryBonus;
 
@@ -48,7 +49,7 @@ namespace DungeonTower.Core
 
         public StatBlock Current => new StatBlock(Body, Mind, Spirit);
 
-        private DerivedStatBonus TotalBonus => (EquippedArmor?.PassiveBonus ?? default) + _consumableBonus + _temporaryBonus;
+        private DerivedStatBonus TotalBonus => (EquippedArmor?.PassiveBonus ?? default) + _weaponBonus + _consumableBonus + _temporaryBonus;
 
         public int MaxHp => Math.Max(1, DerivedStatFormulas.MaxHp(Current) + TotalBonus.Hp);
         public int MaxMp => Math.Max(0, DerivedStatFormulas.MaxMp(Current) + TotalBonus.Mp);
@@ -60,8 +61,16 @@ namespace DungeonTower.Core
         public int MoveRange => Math.Max(0, DerivedStatFormulas.MoveRange(Current) + TotalBonus.MoveRange);
         public float StatusResist => Math.Max(0f, Math.Min(DerivedStatFormulas.StatusResistCapWithGear,
             DerivedStatFormulas.StatusResist(Current) + TotalBonus.StatusResist));
-        public float CritChance => Math.Max(0f, Math.Min(DerivedStatFormulas.CritCapWithGear,
-            DerivedStatFormulas.CritChance(Current) + TotalBonus.CritChance));
+        // Crit has no stat source any more: it comes from gear/buffs here, and the
+        // ability being used adds its own on top (see AttackResolver).
+        public float CritChance => Math.Max(0f, Math.Min(DerivedStatFormulas.CritCapWithGear, TotalBonus.CritChance));
+        public float SupportPower => Math.Max(0f, DerivedStatFormulas.SupportPower(Current) + TotalBonus.SupportPower);
+        // Percent. Adds to the chance of statuses this unit applies and scales their strength.
+        public float Potency => Math.Max(0f, DerivedStatFormulas.Potency(Current) + TotalBonus.Potency);
+        // Percent more HP from every heal this unit receives.
+        public float HealingReceived => Math.Max(0f, DerivedStatFormulas.HealingReceived(Current) + TotalBonus.HealingReceived);
+        // MP regained at the start of this unit's own turn while in combat.
+        public float MpRegen => Math.Max(0f, DerivedStatFormulas.MpRegen(Current) + TotalBonus.MpRegen);
 
         public UnitStats(StatBlock startingStats, int startingLevel = 1, int startingPoints = 0)
         {
@@ -138,6 +147,10 @@ namespace DungeonTower.Core
 
         // Applied by a Buff-kind ability (a potion or buff scroll) —
         // stacks additively with whatever's already accumulated.
+        // Sum of both hands' PassiveBonus; CombatUnit refreshes it whenever
+        // a hand changes.
+        public void SetWeaponBonus(DerivedStatBonus bonus) => _weaponBonus = bonus;
+
         public void AddBonus(DerivedStatBonus bonus) => _consumableBonus += bonus;
 
         public void SetTemporaryBonus(DerivedStatBonus bonus) => _temporaryBonus = bonus;

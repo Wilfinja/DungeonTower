@@ -5,7 +5,8 @@ namespace DungeonTower.Core
     /// <summary>
     /// A flat bonus to one or more derived (secondary) stats — HP, MP,
     /// Physical/Magic Attack and Defense, Initiative, Move Range, Status
-    /// Resist, Crit. This is what armor grants. Unlike StatGrowth (which
+    /// Resist, Crit, Support Power, Potency, Healing Received, MP Regen.
+    /// This is what armor and weapons grant. Unlike StatGrowth (which
     /// feeds Body/Mind/Spirit), this never touches the primary stats —
     /// those only ever grow from leveling.
     ///
@@ -29,13 +30,19 @@ namespace DungeonTower.Core
         public int MoveRange;
         public float StatusResist;
         public float CritChance;
+        public float SupportPower;
+        public float Potency;        // percent
+        public float HealingReceived; // percent
+        public float MpRegen;        // MP per turn
 
         public DerivedStatBonus(
             int hp = 0, int mp = 0,
             float physicalAttack = 0, float physicalDefense = 0,
             float magicAttack = 0, float magicDefense = 0,
             int initiative = 0, int moveRange = 0,
-            float statusResist = 0, float critChance = 0)
+            float statusResist = 0, float critChance = 0,
+            float supportPower = 0, float potency = 0,
+            float healingReceived = 0, float mpRegen = 0)
         {
             Hp = hp;
             Mp = mp;
@@ -47,6 +54,10 @@ namespace DungeonTower.Core
             MoveRange = moveRange;
             StatusResist = statusResist;
             CritChance = critChance;
+            SupportPower = supportPower;
+            Potency = potency;
+            HealingReceived = healingReceived;
+            MpRegen = mpRegen;
         }
 
         public static DerivedStatBonus operator +(DerivedStatBonus a, DerivedStatBonus b) => new DerivedStatBonus(
@@ -54,6 +65,8 @@ namespace DungeonTower.Core
             physicalAttack: a.PhysicalAttack + b.PhysicalAttack, physicalDefense: a.PhysicalDefense + b.PhysicalDefense,
             magicAttack: a.MagicAttack + b.MagicAttack, magicDefense: a.MagicDefense + b.MagicDefense,
             initiative: a.Initiative + b.Initiative, moveRange: a.MoveRange + b.MoveRange,
-            statusResist: a.StatusResist + b.StatusResist, critChance: a.CritChance + b.CritChance);
+            statusResist: a.StatusResist + b.StatusResist, critChance: a.CritChance + b.CritChance,
+            supportPower: a.SupportPower + b.SupportPower, potency: a.Potency + b.Potency,
+            healingReceived: a.HealingReceived + b.HealingReceived, mpRegen: a.MpRegen + b.MpRegen);
     }
 }

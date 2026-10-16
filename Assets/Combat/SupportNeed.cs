@@ -43,7 +43,7 @@ namespace DungeonTower.Combat
 
         private static bool NeedsHeal(CombatUnit ally, IAbility ability, float thresholdPercent)
         {
-            if (ability.HealHp > 0)
+            if (AbilityScaling.HealsHp(ability))
             {
                 if (ally.CurrentHp >= ally.Stats.MaxHp) return false;
                 float hpPercent = 100f * ally.CurrentHp / System.Math.Max(1, ally.Stats.MaxHp);

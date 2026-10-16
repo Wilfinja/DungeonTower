@@ -22,13 +22,33 @@ namespace DungeonTower.Core
         string Name { get; }
         EffectKind EffectKind { get; }
 
-        // Damage-only.
+        // Damage-only: which DEFENSE applies (Physical Defense or Magic Defense).
+        // For an ability with no authored stat weights it also picks the
+        // stat that powers it (Physical = Body, Magical = Mind).
         AttackKind Kind { get; }
+
+        // LEGACY single multiplier. Only meaningful for an ability that has no
+        // authored weights - read Scaling instead, which already accounts for it.
         float DamageMultiplier { get; }
+
+        // What powers this ability: weight x stat power, summed (see
+        // AbilityScaling). Never null. Damage uses it as attack power; a Heal
+        // adds it to HealHp. Abilities authored before weights existed return
+        // the equivalent single-entry list, so they behave exactly as before.
+        IReadOnlyList<StatWeight> Scaling { get; }
+
+        // Damage-only: crit chance (percent) this ability adds on top of the
+        // attacker's gear bonus. Crit no longer comes from Spirit.
+        float CritChance { get; }
 
         // Heal-only.
         int HealHp { get; }
         int HealMp { get; }
+
+        // LEGACY (drop 1): Support Power times this was added to HealHp. Now just
+        // the fallback for a Heal ability with no authored weights; Scaling
+        // already includes it. 0 = a flat heal (what potions use).
+        float HealSupportMultiplier { get; }
         int MpCost {  get; }
 
         // Buff-only — applied as a permanent-for-the-battle addition,

@@ -18,8 +18,18 @@ namespace DungeonTower.Core
         // future loot table would filter by, without each individual
         // weapon needing its own unique enum entry.
         WeaponId Group { get; }
+
+        // First requirement (kept for older callers); Requirements is the
+        // full list - every entry must be met.
         PrimaryStat RequiredStat { get; }
         int RequiredStatValue { get; }
+        IReadOnlyList<StatRequirement> Requirements { get; }
+
+        // How it's held, and flat stat bonuses it gives while equipped
+        // (added up across both hands).
+        HandUse Hands { get; }
+        DerivedStatBonus PassiveBonus { get; }
+
         IReadOnlyList<IAbility> Abilities { get; }
 
         // False for a "natural weapon" — a claw, bite, etc. that's

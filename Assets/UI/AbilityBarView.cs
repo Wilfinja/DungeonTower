@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -8,14 +9,13 @@ namespace DungeonTower.UI
 {
     /// <summary>
     /// On-screen buttons for the current player unit's turn options: an
-    /// always-available Move button plus up to two weapon-ability
+    /// always-available Move button plus up to four weapon-ability
     /// buttons. Purely a view — BattleController owns which mode is
     /// actually active and what selecting one means for the turn, and
     /// tells this view whether each ability is on cooldown right now
     /// (via the remainingCooldown callback passed to Show) rather than
     /// this view knowing anything about CombatUnit itself.
-    /// AbilitySelected fires with the clicked ability button's index (0
-    /// or 1); MoveSelected fires separately since Move isn't an ability.
+    /// AbilitySelected fires with the clicked ability button's index (0-3); MoveSelected fires separately since Move isn't an ability.
     ///
     /// NOTE: this adds a new Move button/label pair not present before —
     /// wire up a Button + TextMeshProUGUI in the prefab/scene and assign
@@ -31,6 +31,23 @@ namespace DungeonTower.UI
         [SerializeField] private Button _button2;
         [SerializeField] private TextMeshProUGUI _label1;
         [SerializeField] private TextMeshProUGUI _label2;
+        [Tooltip("Optional until a build has 3+ abilities: with both hands full a hero can have 4.")]
+        [SerializeField] private Button _button3;
+        [SerializeField] private Button _button4;
+        [SerializeField] private TextMeshProUGUI _label3;
+        [SerializeField] private TextMeshProUGUI _label4;
+
+        private Button[] _buttons;
+        private TextMeshProUGUI[] _labels;
+        private bool _warnedMissing;
+
+        // Built on first use so it works whether or not Awake has run yet.
+        private void EnsureArrays()
+        {
+            if (_buttons != null) return;
+            _buttons = new[] { _button1, _button2, _button3, _button4 };
+            _labels = new[] { _label1, _label2, _label3, _label4 };
+        }
 
         public event Action<int> AbilitySelected;
         public event Action MoveSelected;
@@ -38,27 +55,42 @@ namespace DungeonTower.UI
         private void Awake()
         {
             _moveButton.onClick.AddListener(() => MoveSelected?.Invoke());
-            _button1.onClick.AddListener(() => AbilitySelected?.Invoke(0));
-            _button2.onClick.AddListener(() => AbilitySelected?.Invoke(1));
+            EnsureArrays();
+            for (int i = 0; i < _buttons.Length; i++)
+            {
+                int index = i;
+                if (_buttons[i] != null) _buttons[i].onClick.AddListener(() => AbilitySelected?.Invoke(index));
+            }
             if (_waitButton != null) _waitButton.onClick.AddListener(() => WaitSelected?.Invoke());
         }
 
         // remainingCooldown(ability) should return 0 for "ready", or the
         // number of the unit's own turns left before it's usable again.
-        public void Show(IWeapon weapon, Func<IAbility, int> remainingCooldown, Func<IAbility, bool> isBlocked = null)
+        public void Show(IReadOnlyList<IAbility> abilities, Func<IAbility, int> remainingCooldown, Func<IAbility, bool> isBlocked = null)
         {
+            EnsureArrays();
             gameObject.SetActive(true);
             _moveButton.gameObject.SetActive(true);
             if (_waitButton != null) _waitButton.gameObject.SetActive(true);
 
-            bool hasFirst = weapon != null && weapon.Abilities.Count > 0;
-            bool hasSecond = weapon != null && weapon.Abilities.Count > 1;
+            for (int i = 0; i < _buttons.Length; i++)
+            {
+                var button = _buttons[i];
+                bool has = abilities != null && i < abilities.Count;
 
-            _button1.gameObject.SetActive(hasFirst);
-            if (hasFirst) SetAbilityButton(_button1, _label1, weapon.Abilities[0], remainingCooldown, isBlocked);
+                if (button == null)
+                {
+                    if (has && !_warnedMissing)
+                    {
+                        _warnedMissing = true;
+                        Debug.LogWarning($"AbilityBarView has no button {i + 1} assigned, so ability '{abilities[i].Name}' can't be shown.", this);
+                    }
+                    continue;
+                }
 
-            _button2.gameObject.SetActive(hasSecond);
-            if (hasSecond) SetAbilityButton(_button2, _label2, weapon.Abilities[1], remainingCooldown, isBlocked);
+                button.gameObject.SetActive(has);
+                if (has && _labels[i] != null) SetAbilityButton(button, _labels[i], abilities[i], remainingCooldown, isBlocked);
+            }
         }
 
         private static void SetAbilityButton(Button button, TextMeshProUGUI label, IAbility ability,
@@ -80,8 +112,9 @@ namespace DungeonTower.UI
         {
             gameObject.SetActive(true);
             _moveButton.gameObject.SetActive(true);
-            _button1.gameObject.SetActive(false);
-            _button2.gameObject.SetActive(false);
+            EnsureArrays();
+            foreach (var button in _buttons)
+                if (button != null) button.gameObject.SetActive(false);
             if (_waitButton != null) _waitButton.gameObject.SetActive(true);
         }
 
@@ -97,8 +130,9 @@ namespace DungeonTower.UI
         public void SetSelected(int index)
         {
             _moveLabel.fontStyle = index < 0 ? FontStyles.Bold : FontStyles.Normal;
-            _label1.fontStyle = index == 0 ? FontStyles.Bold : FontStyles.Normal;
-            _label2.fontStyle = index == 1 ? FontStyles.Bold : FontStyles.Normal;
+            EnsureArrays();
+            for (int i = 0; i < _labels.Length; i++)
+                if (_labels[i] != null) _labels[i].fontStyle = index == i ? FontStyles.Bold : FontStyles.Normal;
         }
     }
 }

@@ -16,11 +16,11 @@ namespace DungeonTower.Combat
     }
 
     /// <summary>
-    /// Resolves a single Damage-kind ability hitting one target — the
-    /// ability's Kind decides whether Physical or Magic Attack/Defense
-    /// apply, and its DamageMultiplier scales the attacker's raw stat
-    /// before defense is subtracted. No accuracy/evasion stat exists
-    /// yet, so every attack is assumed to hit. Crit multiplier is a
+    /// Resolves a single Damage-kind ability hitting one target. The
+    /// ability's stat weights decide how hard it hits (weight x stat power,
+    /// summed - see AbilityScaling), and its Kind decides which defense,
+    /// Physical or Magic, is subtracted from that. No accuracy/evasion stat
+    /// exists yet, so every attack is assumed to hit. Crit multiplier is a
     /// placeholder.
     ///
     /// Heal/Buff-kind abilities don't go through here at all — they're
@@ -36,16 +36,16 @@ namespace DungeonTower.Combat
 
         public static AttackResult Resolve(CombatUnit attacker, CombatUnit defender, IAbility ability, Random rng)
         {
-            float attack = ability.Kind == AttackKind.Physical
-                ? attacker.Stats.PhysicalAttack
-                : attacker.Stats.MagicAttack;
+            float attack = AbilityScaling.Total(attacker.Stats, ability);
             float defense = ability.Kind == AttackKind.Physical
                 ? defender.Stats.PhysicalDefense
                 : defender.Stats.MagicDefense;
 
-            bool isCrit = rng.NextDouble() * 100.0 < attacker.Stats.CritChance;
+            // Crit = the attacker's gear bonus + whatever this ability adds.
+            float critChance = Math.Min(100f, attacker.Stats.CritChance + ability.CritChance);
+            bool isCrit = rng.NextDouble() * 100.0 < critChance;
 
-            float rawDamage = Math.Max(MinimumDamage, attack * ability.DamageMultiplier - defense);
+            float rawDamage = Math.Max(MinimumDamage, attack - defense);
             if (isCrit) rawDamage *= CritDamageMultiplier;
 
             return new AttackResult(isCrit, (int)Math.Round(rawDamage, MidpointRounding.AwayFromZero));

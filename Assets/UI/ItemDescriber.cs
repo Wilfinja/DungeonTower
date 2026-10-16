@@ -25,7 +25,11 @@ namespace DungeonTower.UI
 
             var sb = new StringBuilder();
             sb.Append("<b>").Append(weapon.Name).Append("</b>");
-            sb.Append('\n').Append(RequirementLine(weapon.RequiredStat, weapon.RequiredStatValue, viewer));
+            sb.Append('\n').Append(HandRules.Describe(weapon.Hands));
+            sb.Append('\n').Append(RequirementsLine(weapon.Requirements, viewer));
+
+            var bonusLines = BonusLines(weapon.PassiveBonus);
+            if (bonusLines.Count > 0) sb.Append("\nGrants: ").Append(string.Join(", ", bonusLines));
 
             var abilities = weapon.Abilities;
             for (int i = 0; i < abilities.Count; i++)
@@ -64,7 +68,25 @@ namespace DungeonTower.UI
                     break;
 
                 case EffectKind.Heal:
-                    if (ability.HealHp > 0) sb.Append("\nRestores ").Append(ability.HealHp).Append(" HP");
+                    if (AbilityScaling.HealsHp(ability))
+                    {
+                        bool scales = AbilityScaling.HasScaling(ability);
+                        if (viewer != null && scales)
+                        {
+                            float total = ability.HealHp + AbilityScaling.Total(viewer, ability);
+                            string flat = ability.HealHp > 0 ? $"{ability.HealHp} + " : "";
+                            sb.Append($"\nRestores about {UiText.Num(total)} HP ({flat}{DescribeParts(ability.Scaling, viewer)})");
+                        }
+                        else if (scales)
+                        {
+                            string flat = ability.HealHp > 0 ? $"{ability.HealHp} + " : "";
+                            sb.Append($"\nRestores {flat}{DescribeWeights(ability.Scaling)} HP");
+                        }
+                        else
+                        {
+                            sb.Append("\nRestores ").Append(ability.HealHp).Append(" HP");
+                        }
+                    }
                     if (ability.HealMp > 0) sb.Append("\nRestores ").Append(ability.HealMp).Append(" MP");
                     break;
 
@@ -113,6 +135,20 @@ namespace DungeonTower.UI
             return sb.ToString();
         }
 
+        // "Requires Body 4, Spirit 4" - each unmet term red.
+        public static string RequirementsLine(IReadOnlyList<StatRequirement> reqs, UnitStats viewer)
+        {
+            var parts = new List<string>();
+            foreach (var r in reqs)
+            {
+                if (r.Value <= 0) continue;
+                string text = $"{r.Stat} {r.Value}";
+                bool unmet = viewer != null && viewer.Current.Get(r.Stat) < r.Value;
+                parts.Add(unmet ? UiText.Unmet(text) : text);
+            }
+            return parts.Count == 0 ? "No stat requirement" : "Requires " + string.Join(", ", parts);
+        }
+
         // "Requires Body 6" — red when the viewer falls short.
         public static string RequirementLine(PrimaryStat stat, int value, UnitStats viewer)
         {
@@ -137,6 +173,10 @@ namespace DungeonTower.UI
             AddBonus(lines, b.MoveRange, "Move Range");
             AddBonus(lines, b.StatusResist, "Status Resist", "%");
             AddBonus(lines, b.CritChance, "Crit Chance", "%");
+            AddBonus(lines, b.SupportPower, "Support Power");
+            AddBonus(lines, b.Potency, "Potency", "%");
+            AddBonus(lines, b.HealingReceived, "Healing Received", "%");
+            AddBonus(lines, b.MpRegen, "MP Regen");
             return lines;
         }
 
@@ -151,18 +191,42 @@ namespace DungeonTower.UI
             bool physical = ability.Kind == AttackKind.Physical;
             string kind = physical ? "Physical" : "Magic";
 
+            if (!AbilityScaling.HasScaling(ability))
+            {
+                sb.Append($"\nDeals minimal {kind} damage (no stat scaling)");
+                return;
+            }
+
             if (viewer != null)
             {
-                float attack = physical ? viewer.PhysicalAttack : viewer.MagicAttack;
-                float raw = attack * ability.DamageMultiplier;
+                float raw = AbilityScaling.Total(viewer, ability);
                 sb.Append($"\nDeals about {UiText.Num(raw)} {kind} damage ")
-                  .Append($"({UiText.Num(attack)} attack × {UiText.Num(ability.DamageMultiplier)}), minus the target's defense");
-                sb.Append($"\nCrit chance {UiText.Num(viewer.CritChance)}% for ×{UiText.Num(AttackResolver.CritDamageMultiplier)} damage");
+                  .Append($"({DescribeParts(ability.Scaling, viewer)}), minus the target's {kind} Defense");
+                sb.Append($"\nCrit chance {UiText.Num(viewer.CritChance + ability.CritChance)}% for ×{UiText.Num(AttackResolver.CritDamageMultiplier)} damage");
             }
             else
             {
-                sb.Append($"\nDeals {UiText.Num(ability.DamageMultiplier)}× your {kind} Attack as {kind} damage, minus the target's defense");
+                sb.Append($"\nDeals {DescribeWeights(ability.Scaling)} as {kind} damage, minus the target's {kind} Defense");
             }
+        }
+
+        // "1.1× Body + 1.2× Spirit"
+        private static string DescribeWeights(IReadOnlyList<StatWeight> weights)
+        {
+            var parts = new List<string>();
+            foreach (var w in weights)
+                if (w.Weight > 0f) parts.Add($"{UiText.Num(w.Weight)}× {w.Stat}");
+            return string.Join(" + ", parts);
+        }
+
+        // "1.1× Body (14.5) + 1.2× Spirit (5.4)" - what each term is worth for this viewer.
+        private static string DescribeParts(IReadOnlyList<StatWeight> weights, UnitStats viewer)
+        {
+            var parts = new List<string>();
+            foreach (var w in weights)
+                if (w.Weight > 0f)
+                    parts.Add($"{UiText.Num(w.Weight)}× {w.Stat} ({UiText.Num(w.Weight * AbilityScaling.PowerOf(viewer, w.Stat))})");
+            return string.Join(" + ", parts);
         }
 
         // "Range 3 · Enemies · Single target · Cooldown 2 turns"

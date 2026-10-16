@@ -14,7 +14,7 @@ namespace DungeonTower.UI
     /// scrollable grid, plus ONE party member's gear at a time, switched
     /// with the member tab buttons (one section per hero — see
     /// MemberSection). A member's gear is two separate
-    /// grids — a 2-slot equipment row (weapon, armor) and a 4-slot belt
+    /// grids — a 3-slot equipment row (main hand, off hand, armor) and a 4-slot belt
     /// row — so a "Weapon / Armor" and a "Belt" heading can sit next to
     /// each, however they're arranged on screen (stacked or
     /// side-by-side; that's layout, not code). The other members' grids
@@ -62,7 +62,7 @@ namespace DungeonTower.UI
         {
             public Button TabButton;
             public TextMeshProUGUI TabLabel;
-            [Tooltip("2-slot grid: weapon, then armor.")]
+            [Tooltip("3-slot grid: main hand, off hand, then armor.")]
             public Transform EquipmentContainer;
             [Tooltip("Grid of unit.Belt.SlotCount slots.")]
             public Transform BeltContainer;
@@ -286,7 +286,7 @@ namespace DungeonTower.UI
             return data;
         }
 
-        // equipmentPool gets exactly 2 slots (weapon, then armor);
+        // equipmentPool gets exactly 3 slots (main hand, off hand, then armor);
         // beltPool gets one slot per unit.Belt.SlotCount.
         private void PopulateMember(int index, InventorySlotPool equipmentPool, InventorySlotPool beltPool)
         {
@@ -299,15 +299,27 @@ namespace DungeonTower.UI
             {
                 equipmentPool.Begin();
 
-                var weapon = unit.EquippedWeapon;
+                var weapon = unit.MainHand;
                 equipmentPool.Next().Configure(new InventorySlotData
                 {
                     Ref = SlotRef.WeaponOf(index),
                     Kind = weapon != null ? InventorySlotKind.Weapon : InventorySlotKind.Empty,
                     Label = weapon != null ? weapon.Name : null,
-                    Placeholder = "Weapon",
+                    Placeholder = "Main Hand",
                     Draggable = editable && weapon != null,
                     Locked = !editable
+                });
+
+                var offHand = unit.OffHand;
+                bool twoHanded = weapon != null && weapon.Hands == HandUse.TwoHanded;
+                equipmentPool.Next().Configure(new InventorySlotData
+                {
+                    Ref = SlotRef.OffHandOf(index),
+                    Kind = offHand != null ? InventorySlotKind.Weapon : InventorySlotKind.Empty,
+                    Label = offHand != null ? offHand.Name : null,
+                    Placeholder = twoHanded ? "(Two-handed)" : "Off Hand",
+                    Draggable = editable && offHand != null,
+                    Locked = !editable || twoHanded
                 });
 
                 var armor = unit.Stats.EquippedArmor;
