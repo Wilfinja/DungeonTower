@@ -72,7 +72,7 @@ namespace DungeonTower.UI
         private bool _stopping;
         private float _savedTimeScale = 1f;
 
-        public IEnumerator Play(AbilityVisuals v, IReadOnlyList<HitRecord> hits, Vector3 attackerWorld)
+        public IEnumerator Play(AbilityVisuals v, IReadOnlyList<HitRecord> hits, Vector3 attackerWorld, Vector3 originWorld)
         {
             float tile = UnitView.TileWorldSize();
             bool anyDamage = false;
@@ -99,7 +99,9 @@ namespace DungeonTower.UI
                 else if (h.Absorbed > 0)
                     SpawnNumber(view, "(" + h.Absorbed + ")", _absorbColor, 1f, 0.9f);
 
-                Vector3 away = pos - attackerWorld;
+                Vector3 away = pos - originWorld;
+                if (away.sqrMagnitude < 0.0001f)          // unit standing dead-center of the blast
+                    away = pos - attackerWorld;           // fall back to knocking it away from the caster
                 if (h.IsKill)
                     StartCoroutine(DeathPop(view, away));
                 else if (view.isActiveAndEnabled)

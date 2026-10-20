@@ -2602,11 +2602,19 @@ namespace DungeonTower.UI
                 var landed = _hits.ToArray();
                 _hits.Clear();
                 if (landed.Length > 0)
-                    yield return _hitFeedback.Play(visuals, landed, GridToWorld.ToWorldPosition(attacker.Position));
+                    yield return _hitFeedback.Play(visuals, landed, GridToWorld.ToWorldPosition(attacker.Position), HitOrigin(attacker, ability, impactTile));
             }
 
             if (show && (visuals.ImpactEffectPrefab != null || visuals.AreaEffectPrefab != null))
                 yield return new WaitForSeconds(visuals.ImpactHoldSeconds);
+        }
+
+        private static Vector3 HitOrigin(CombatUnit attacker, IAbility ability, GridPosition impactTile)
+        {
+            bool fromImpact = ability.AreaShape == AttackShape.Blast
+                           || ability.AreaShape == AttackShape.Ring
+                           || ability.AreaShape == AttackShape.Cross;
+            return GridToWorld.ToWorldPosition(fromImpact ? impactTile : attacker.Position);
         }
 
         private IEnumerator FlyProjectile(AbilityVisuals visuals, Vector3 from, Vector3 to)

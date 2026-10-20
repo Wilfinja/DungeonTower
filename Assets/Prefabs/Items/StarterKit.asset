@@ -13,7 +13,29 @@ MonoBehaviour:
   m_Name: StarterKit
   m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.StarterKitSO
   _budget: 10
-  _weapons: []
-  _armors: []
-  _potions: []
-  _scrolls: []
+  _weapons:
+  - Item: {fileID: 11400000, guid: c209564dc62bd1f46ac828e821c2bfce, type: 2}
+    Cost: 2
+  - Item: {fileID: 11400000, guid: 094407b2265c979438c106e4b944f987, type: 2}
+    Cost: 2
+  - Item: {fileID: 11400000, guid: 29ff215a918935545be78480ff777074, type: 2}
+    Cost: 2
+  - Item: {fileID: 11400000, guid: 0949dd566ee437a4592b0562e91c7070, type: 2}
+    Cost: 2
+  - Item: {fileID: 11400000, guid: d639648c77ea2824fa8acee945f25d80, type: 2}
+    Cost: 2
+  _armors:
+  - Item: {fileID: 11400000, guid: a0a08febff7ae974b9429d1c71521a6f, type: 2}
+    Cost: 3
+  - Item: {fileID: 11400000, guid: 80e3cb5c45a22444297c7d637f013901, type: 2}
+    Cost: 3
+  - Item: {fileID: 11400000, guid: 31cdcfe4e9017bb45b8cc06fdadce139, type: 2}
+    Cost: 3
+  _potions:
+  - Item: {fileID: 11400000, guid: fc38316a7c7a8754ea6e66665325384b, type: 2}
+    Cost: 3
+  _scrolls:
+  - Item: {fileID: 11400000, guid: e4ffdb0c5e1154348ad3b36a905ec4d5, type: 2}
+    Cost: 3
+  - Item: {fileID: 11400000, guid: cb2c33dc8a5518b41ba4073ac8750078, type: 2}
+    Cost: 2
