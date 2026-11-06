@@ -2322,7 +2322,9 @@ namespace DungeonTower.UI
                 if (enemy.Faction != Faction.Enemy || !enemy.IsAlive || enemy.IsAlerted) continue;
                 if (!_fog.IsCurrentlyVisible(enemy.Position)) continue; // can't see it, can't see its danger zone
                 foreach (var tile in TilesWithinRadius(enemy.Position, enemy.DetectionRadius))
-                    if (_map.IsWalkable(tile) && LineOfSight.HasClearPath(enemy.Position, tile, _sightMap))
+                    // Only tiles the party has already seen: otherwise the overlay
+                    // would reveal unexplored floor (and the room's shape) early.
+                    if (_fog.IsExplored(tile) && _map.IsWalkable(tile) && LineOfSight.HasClearPath(enemy.Position, tile, _sightMap))
                         dangerTiles.Add(tile);
             }
 
