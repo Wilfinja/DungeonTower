@@ -14,8 +14,25 @@ MonoBehaviour:
   m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.WeaponSO
   _weaponName: Iron Spear
   _group: 0
+  _hands: 2
+  _requirements: []
   _requiredStat: 0
   _requiredStatValue: 5
+  _passiveBonus:
+    Hp: 0
+    Mp: 0
+    PhysicalAttack: 0
+    PhysicalDefense: 0
+    MagicAttack: 0
+    MagicDefense: 0
+    Initiative: 0
+    MoveRange: 0
+    StatusResist: 0
+    CritChance: 0
+    SupportPower: 0
+    Potency: 0
+    HealingReceived: 0
+    MpRegen: 0
   _abilities:
   - {fileID: 11400000, guid: 6ffa938b35f4b8643a57aaa3d34ccbd3, type: 2}
   - {fileID: 11400000, guid: bfd0245a9632efe49a483ba1b7ca0753, type: 2}

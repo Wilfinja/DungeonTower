@@ -1331,11 +1331,12 @@ namespace DungeonTower.UI
         private GridPosition? ScreenPointToGridPosition(Vector2 screenPoint)
         {
             var worldPoint = Camera.main.ScreenToWorldPoint(screenPoint);
-            var hit = Physics2D.OverlapPoint(worldPoint);
-            if (hit == null) return null;
-
-            var tile = hit.GetComponent<TileView>();
-            return tile != null ? tile.Position : (GridPosition?)null;
+            foreach (var hit in Physics2D.OverlapPointAll(worldPoint))
+            {
+                var tile = hit.GetComponent<TileView>();
+                if (tile != null) return tile.Position;
+            }
+            return null;
         }
 
         private void HandlePlayerClick(GridPosition target)
@@ -2581,8 +2582,15 @@ namespace DungeonTower.UI
                     ? () => PlayMeleeEffect(visuals, from, to)
                     : (Action)null;
 
-                if (visuals.Lunge)
-                    yield return _unitViews[attacker].PlayAttack(to - from, visuals.WindUpSeconds, slash);
+                if (visuals.Gathers)
+                    yield return PlayGather(visuals, from, to);
+
+                if (visuals.Lunges)
+                {
+                    // After a gather the caster is already "charged", so the pull-back is just a short coil.
+                    float pullBack = visuals.Gathers ? Mathf.Min(visuals.WindUpSeconds, 0.12f) : visuals.WindUpSeconds;
+                    yield return _unitViews[attacker].PlayAttack(to - from, pullBack, slash);
+                }
                 else
                     slash?.Invoke();
 
@@ -2617,6 +2625,35 @@ namespace DungeonTower.UI
             return GridToWorld.ToWorldPosition(fromImpact ? impactTile : attacker.Position);
         }
 
+        // Plays the gather prefab on the caster for as long as its particle
+        // systems run, then stops emission so the leftovers fade while the
+        // ability fires.
+        private IEnumerator PlayGather(AbilityVisuals v, Vector3 from, Vector3 to)
+        {
+            float seconds = v.GatherSeconds;
+            if (v.GatherEffectPrefab == null)
+            {
+                if (seconds > 0f) yield return new WaitForSeconds(seconds);
+                yield break;
+            }
+
+            var direction = to - from;
+            var position = from;
+            var rotation = Quaternion.identity;
+            if (direction.sqrMagnitude > 0.0001f)
+            {
+                position += direction.normalized * (v.GatherOffsetTiles * UnitView.TileWorldSize());
+                rotation = FacingRotation(direction);
+            }
+
+            var fx = Instantiate(v.GatherEffectPrefab, position, rotation * v.GatherEffectPrefab.transform.rotation, transform);
+            yield return new WaitForSeconds(seconds);
+
+            if (fx == null) yield break;
+            foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>()) ps.Stop();
+            Destroy(fx, v.GatherTailSeconds + 0.5f);
+        }
+
         private IEnumerator FlyProjectile(AbilityVisuals visuals, Vector3 from, Vector3 to)
         {
             var authored = visuals.ProjectilePrefab.transform.rotation;
@@ -2633,8 +2670,17 @@ namespace DungeonTower.UI
             }
             if (projectile == null) yield break;
 
-            foreach (var ps in projectile.GetComponentsInChildren<ParticleSystem>()) ps.Stop();   // let trails fade
-            Destroy(projectile, 1f);
+            // Hide the projectile's body at once; only particle/trail effects get to fade out.
+            foreach (var r in projectile.GetComponentsInChildren<Renderer>())
+                if (!(r is ParticleSystemRenderer) && !(r is TrailRenderer)) r.enabled = false;
+
+            var stopMode = visuals.ProjectileFadeSeconds <= 0f
+                ? ParticleSystemStopBehavior.StopEmittingAndClear   // gone instantly
+                : ParticleSystemStopBehavior.StopEmitting;          // let existing particles finish
+            foreach (var ps in projectile.GetComponentsInChildren<ParticleSystem>())
+                ps.Stop(true, stopMode);
+
+            Destroy(projectile, visuals.ProjectileFadeSeconds);
         }
 
         // Rotates an effect authored facing RIGHT (+X) to point along `direction`.
@@ -2680,6 +2726,21 @@ namespace DungeonTower.UI
                 if (direction.sqrMagnitude > 0.0001f) rotation = FacingRotation(direction);
             }
             SpawnEffect(v.ImpactEffectPrefab, tile, v.EffectLifetime, rotation);
+
+            // Let the sparks leave the target's collider before it can block them.
+            var hitUnit = FindLivingUnitAt(tile);
+            if (hitUnit != null && _unitViews.TryGetValue(hitUnit, out var hitView))
+                StartCoroutine(PauseColliders(hitView, 0.15f));
+        }
+
+        // Scaled time on purpose: particles freeze during hit stop (timeScale 0),
+        // so the collider must stay off for the same frozen time.
+        private IEnumerator PauseColliders(UnitView view, float seconds)
+        {
+            var colliders = view.GetComponentsInChildren<Collider2D>();
+            foreach (var c in colliders) c.enabled = false;
+            yield return new WaitForSeconds(seconds);
+            foreach (var c in colliders) if (c != null) c.enabled = true;
         }
 
         private void PlayAreaEffect(CombatUnit attacker, IAbility ability, GridPosition impactTile)

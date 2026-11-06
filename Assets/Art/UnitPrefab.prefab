@@ -192,7 +192,8 @@ GameObject:
   - component: {fileID: 5706022206414193119}
   - component: {fileID: 2073329336766396958}
   - component: {fileID: 5594254717709379732}
-  m_Layer: 0
+  - component: {fileID: 1319893075155140996}
+  m_Layer: 7
   m_Name: UnitPrefab
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -283,3 +284,44 @@ MonoBehaviour:
   _glyph: {fileID: 2923936566647130880}
   _playerColor: {r: 0, g: 1, b: 1, a: 1}
   _enemyColor: {r: 1, g: 0, b: 0, a: 1}
+  _tilesPerSecond: 8
+  _pullBackTiles: 0.25
+  _lungeTiles: 0.35
+  _snapSeconds: 0.06
+  _returnSeconds: 0.12
+--- !u!58 &1319893075155140996
+CircleCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2690769442787636600}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 0
+  m_UsedByEffector: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
+  m_Offset: {x: 0, y: 0}
+  m_Radius: 0.5

@@ -14,8 +14,27 @@ MonoBehaviour:
   m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.WeaponSO
   _weaponName: Wood Staff
   _group: 4
+  _hands: 2
+  _requirements:
+  - Stat: 1
+    Value: 5
   _requiredStat: 1
   _requiredStatValue: 5
+  _passiveBonus:
+    Hp: 0
+    Mp: 0
+    PhysicalAttack: 0
+    PhysicalDefense: 0
+    MagicAttack: 0
+    MagicDefense: 0
+    Initiative: 0
+    MoveRange: 0
+    StatusResist: 0
+    CritChance: 0
+    SupportPower: 0
+    Potency: 0
+    HealingReceived: 0
+    MpRegen: 0
   _abilities:
   - {fileID: 11400000, guid: d0cc47e80818b1143b2df2f00325e7a2, type: 2}
   - {fileID: 11400000, guid: bf3a120e124f11e4c9983a2d3b20a3c4, type: 2}

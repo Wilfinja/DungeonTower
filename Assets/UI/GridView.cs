@@ -33,6 +33,7 @@ namespace DungeonTower.UI
                     var tile = Instantiate(_tilePrefab, transform);
                     tile.transform.position = GridToWorld.ToWorldPosition(pos);
                     tile.Initialize(pos, map.GetTile(pos), map.IsDoorOpen(pos));
+                    if (map.GetTile(pos) == TileType.Wall) tile.gameObject.layer = LayerMask.NameToLayer("Walls");
                     _tiles[pos] = tile;
                 }
             }
