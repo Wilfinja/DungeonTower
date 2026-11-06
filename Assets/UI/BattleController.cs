@@ -283,7 +283,7 @@ namespace DungeonTower.UI
             if (_mode != ActionMode.Move) SetMode(ActionMode.Move);
             _inventoryPanel.Hide();
             if (_characterSheet != null) _characterSheet.Hide();
-            _lootWindow.Show(GetLootableContainersInRange(_battle.CurrentUnit));
+            _lootWindow.Show(GetLootableContainersInRange(_battle.CurrentUnit), _battle.CurrentUnit.Stats);
         }
 
         private void Start()
@@ -2511,7 +2511,7 @@ namespace DungeonTower.UI
             {
                 var unit = _battle.CurrentUnit;
                 RefreshLootAvailability(unit);
-                if (_lootWindow != null) _lootWindow.Refresh(GetLootableContainersInRange(unit));
+                if (_lootWindow != null) _lootWindow.Refresh(GetLootableContainersInRange(unit), unit.Stats);
             }
         }
 
