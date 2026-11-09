@@ -1782,6 +1782,8 @@ namespace DungeonTower.UI
             sb.Append("\nHP ").Append(enemy.CurrentHp).Append('/').Append(enemy.Stats.MaxHp);
             if (enemy.Stats.MaxMp > 0) sb.Append("   MP ").Append(enemy.CurrentMp).Append('/').Append(enemy.Stats.MaxMp);
 
+            sb.Append("\nActions per turn: ").Append(enemy.Actions.BaseActionsPerPhase);
+
             sb.Append("\n\nMain hand: ").Append(enemy.MainHand != null ? enemy.MainHand.Name : "none");
             sb.Append("\nOff hand: ").Append(enemy.OffHand != null ? enemy.OffHand.Name : "none");
             sb.Append("\nArmor: ").Append(enemy.Stats.EquippedArmor != null ? enemy.Stats.EquippedArmor.Name : "none");
