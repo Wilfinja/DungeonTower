@@ -30,6 +30,7 @@ namespace DungeonTower.UI
         private Canvas _canvas;
         private RectTransform _parentRect;
         private bool _visible;
+        private bool _pinned;   // stays where it was shown instead of following the mouse
         private readonly Vector3[] _corners = new Vector3[4];
 
         private void Awake()
@@ -73,7 +74,8 @@ namespace DungeonTower.UI
             if (Instance == this) Instance = null;
         }
 
-        public void Show(string text)
+        // pinned: the box stays put (used by right-click inspect) until Hide().
+        public void Show(string text, bool pinned = false)
         {
             if (!enabled) return;
             if (string.IsNullOrEmpty(text)) { Hide(); return; }
@@ -85,6 +87,7 @@ namespace DungeonTower.UI
 
             _root.SetAsLastSibling();   // draw above the panels it describes
             _visible = true;
+            _pinned = pinned;
             _group.alpha = 1f;
             Reposition();
         }
@@ -92,12 +95,13 @@ namespace DungeonTower.UI
         public void Hide()
         {
             _visible = false;
+            _pinned = false;
             if (_group != null) _group.alpha = 0f;
         }
 
         private void LateUpdate()
         {
-            if (_visible) Reposition();
+            if (_visible && !_pinned) Reposition();
         }
 
         private void Reposition()
