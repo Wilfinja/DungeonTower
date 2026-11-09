@@ -1721,7 +1721,7 @@ namespace DungeonTower.UI
             if (_battle == null || _battle.Outcome != BattleOutcome.InProgress) return;
             if (_battle.CurrentUnit.Faction != Faction.Player) return;
 
-            HandleCancelInput();
+            if (!HandleInspectInput()) HandleCancelInput();
             HandleHeroCycleInput();
             HandleHoverPreview();
 
@@ -1734,6 +1734,71 @@ namespace DungeonTower.UI
             var clicked = ScreenPointToGridPosition(Mouse.current.position.ReadValue());
             if (clicked != null)
                 HandlePlayerClick(clicked.Value);
+        }
+
+        // ---- Right-click inspect ----------------------------------------
+        // Right-click an enemy you can currently see to pin a tooltip with
+        // its name, role, health and gear. Any click or Escape dismisses it.
+        private bool _inspecting;
+
+        // True when this frame's right-click was used to inspect an enemy
+        // (so it shouldn't also cancel the current aiming mode).
+        private bool HandleInspectInput()
+        {
+            if (Mouse.current == null) return false;
+            bool right = Mouse.current.rightButton.wasPressedThisFrame;
+            bool dismiss = Mouse.current.leftButton.wasPressedThisFrame
+                || (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame);
+
+            if (right)
+            {
+                var overUi = UnityEngine.EventSystems.EventSystem.current != null
+                    && UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject();
+                var tile = overUi ? null : ScreenPointToGridPosition(Mouse.current.position.ReadValue());
+                var enemy = tile.HasValue ? FindLivingUnitAt(tile.Value) : null;
+                if (enemy != null && enemy.Faction == Faction.Enemy && _fog.IsCurrentlyVisible(enemy.Position)
+                    && TooltipView.Instance != null)
+                {
+                    TooltipView.Instance.Show(DescribeEnemy(enemy), true);
+                    _inspecting = true;
+                    return true;
+                }
+            }
+
+            if ((right || dismiss) && _inspecting)
+            {
+                _inspecting = false;
+                if (TooltipView.Instance != null) TooltipView.Instance.Hide();
+            }
+            return false;
+        }
+
+        private string DescribeEnemy(CombatUnit enemy)
+        {
+            var sb = new System.Text.StringBuilder();
+            _enemyKits.TryGetValue(enemy, out var kit);
+            sb.Append("<b>").Append(enemy.DisplayName).Append("</b>");
+            if (kit != null) sb.Append(" (").Append(kit.Role).Append(')');
+            sb.Append("\nHP ").Append(enemy.CurrentHp).Append('/').Append(enemy.Stats.MaxHp);
+            if (enemy.Stats.MaxMp > 0) sb.Append("   MP ").Append(enemy.CurrentMp).Append('/').Append(enemy.Stats.MaxMp);
+
+            sb.Append("\nActions per turn: ").Append(enemy.Actions.BaseActionsPerPhase);
+
+            sb.Append("\n\nMain hand: ").Append(enemy.MainHand != null ? enemy.MainHand.Name : "none");
+            sb.Append("\nOff hand: ").Append(enemy.OffHand != null ? enemy.OffHand.Name : "none");
+            sb.Append("\nArmor: ").Append(enemy.Stats.EquippedArmor != null ? enemy.Stats.EquippedArmor.Name : "none");
+
+            if (enemy.WeaponAbilities.Count > 0)
+            {
+                sb.Append("\n\nAbilities:");
+                foreach (var ability in enemy.WeaponAbilities)
+                {
+                    sb.Append("\n- ").Append(ability.Name).Append(" (")
+                      .Append(ability.ActionCost).Append(ability.ActionCost == 1 ? " action" : " actions")
+                      .Append(", range ").Append(ability.Range).Append(')');
+                }
+            }
+            return sb.ToString();
         }
 
         // Tab switches to the next hero who still has actions.
