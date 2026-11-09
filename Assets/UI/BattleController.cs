@@ -1633,6 +1633,7 @@ namespace DungeonTower.UI
             var tiles = _unitViews.Keys
                 .Where(u => u.IsAlive
                     && (targetAllies ? u.Faction == unit.Faction : u.Faction != unit.Faction)
+                    && AbilityTargeting.Affects(ability, u.Faction == unit.Faction)
                     && u.Position.IsWithinRange(unit.Position, ability.Range)
                     && LineOfSight.HasClearPath(unit.Position, u.Position, _sightMap))
                 .Select(u => u.Position)
@@ -2347,7 +2348,12 @@ namespace DungeonTower.UI
             if (ability.AreaShape == AttackShape.Single)
             {
                 var target = FindLivingUnitAt(impactTile);
-                if (target != null) { ApplyAbilityEffect(attacker, target, ability); return; }
+                if (target != null)
+                {
+                    if (AbilityTargeting.Affects(ability, target.Faction == attacker.Faction))
+                        ApplyAbilityEffect(attacker, target, ability);
+                    return;
+                }
 
                 if (ability.EffectKind == EffectKind.Damage)
                 {
@@ -2384,6 +2390,7 @@ namespace DungeonTower.UI
             {
                 if (!target.IsAlive) continue;
                 if (excludeCaster && target == attacker) continue;
+                if (!AbilityTargeting.Affects(ability, target.Faction == attacker.Faction)) continue;
                 if (!affectedTiles.Contains(target.Position)) continue;
                 ApplyAbilityEffect(attacker, target, ability);
             }
@@ -2549,7 +2556,7 @@ namespace DungeonTower.UI
         private void ExecuteChain(CombatUnit attacker, IAbility ability, GridPosition impactTile)
         {
             var first = FindLivingUnitAt(impactTile);
-            if (first == null) return;
+            if (first == null || !AbilityTargeting.Affects(ability, first.Faction == attacker.Faction)) return;
 
             bool targetsAllies = AbilityTargeting.TargetsAllies(ability);
             var hit = new HashSet<CombatUnit> { first };
@@ -2561,6 +2568,7 @@ namespace DungeonTower.UI
                 var next = _unitViews.Keys
                     .Where(u => u.IsAlive && !hit.Contains(u)
                         && (targetsAllies ? u.Faction == attacker.Faction : u.Faction != attacker.Faction)
+                        && AbilityTargeting.Affects(ability, u.Faction == attacker.Faction)
                         && u.Position.IsWithinRange(current.Position, ability.Range)
                         && LineOfSight.HasClearPath(current.Position, u.Position, _sightMap))
                     .OrderBy(u => u.Position.StepDistance(current.Position))

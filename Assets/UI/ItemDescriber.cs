@@ -243,6 +243,8 @@ namespace DungeonTower.UI
             // Summons are placed on the ground, not aimed at a unit type.
             if (ability.EffectKind != EffectKind.Summon)
                 parts.Add(AbilityTargeting.TargetsAllies(ability) ? "Allies" : "Enemies");
+            if (ability.IgnoreEnemies) parts.Add("Ignores enemies");
+            if (ability.IgnoreAllies) parts.Add("Ignores allies");
 
             parts.Add(ShapeText(ability));
 

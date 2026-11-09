@@ -24,6 +24,13 @@ namespace DungeonTower.Core
             }
         }
 
+        /// <summary>
+        /// True if `ability` may affect a unit on the caster's side
+        /// (sameSide, the caster included) or on the other side.
+        /// </summary>
+        public static bool Affects(IAbility ability, bool sameSide)
+            => sameSide ? !ability.IgnoreAllies : !ability.IgnoreEnemies;
+
         private static bool AllBeneficial(IAbility ability)
         {
             var statuses = ability.Statuses;

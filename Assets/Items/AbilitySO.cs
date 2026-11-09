@@ -98,6 +98,12 @@ namespace DungeonTower.Items
         [Tooltip("How many actions this costs a hero (they get 3 per turn; a step costs 1, a diagonal step 1.5). Enemies ignore this.")]
         [SerializeField, Range(1, 3)] private int _actionCost = 1;
 
+        [Header("Who it affects")]
+        [Tooltip("Skip enemies of the caster even if the area covers them (e.g. an area heal that shouldn't heal enemies). Single-target abilities can't pick an enemy.")]
+        [SerializeField] private bool _ignoreEnemies;
+        [Tooltip("Skip the caster's allies - and the caster - even if the area covers them (e.g. a fire nova that should never burn your own side). Single-target abilities can't pick an ally.")]
+        [SerializeField] private bool _ignoreAllies;
+
         [Header("Visuals")]
         [SerializeField] private AbilityVisuals _visuals = new AbilityVisuals();
         public AbilityVisuals Visuals => _visuals;
@@ -123,6 +129,8 @@ namespace DungeonTower.Items
         public int MpCost => _mpCost;
         public int ActionCost => Mathf.Max(1, _actionCost);
         public bool Silenceable => _silenceable;
+        public bool IgnoreEnemies => _ignoreEnemies;
+        public bool IgnoreAllies => _ignoreAllies;
 
         // Never null, even for an asset serialized before these fields existed.
         public IReadOnlyList<StatusApplication> Statuses
@@ -177,6 +185,8 @@ namespace DungeonTower.Items
         private void OnValidate()
         {
             _legacyScaling = null;
+            if (_ignoreEnemies && _ignoreAllies)
+                Debug.LogWarning($"{name}: Ignore Enemies and Ignore Allies are both on, so this ability can't affect anyone.", this);
 
             if (_statWeights == null) _statWeights = new List<StatWeight>();
             for (int i = 0; i < _statWeights.Count; i++)
