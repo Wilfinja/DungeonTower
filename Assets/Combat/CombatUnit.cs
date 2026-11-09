@@ -122,8 +122,10 @@ namespace DungeonTower.Combat
     EnemyTargetingStrategy targetingStrategy = EnemyTargetingStrategy.Nearest,
     int targetingRange = 8,
     SupportTargetingStrategy supportTargetingStrategy = SupportTargetingStrategy.LowestHpPercent,
-    float supportHealThreshold = 50f)
+    float supportHealThreshold = 50f,
+    int actionsPerTurn = ActionPoints.BaseActions)
         {
+            Actions.BaseActionsPerPhase = Math.Max(1, actionsPerTurn);
             DisplayName = displayName;
             Faction = faction;
             Stats = stats;
