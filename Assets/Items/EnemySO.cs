@@ -39,6 +39,8 @@ namespace DungeonTower.Items
         [SerializeField] private ArmorSO _armor;
         [SerializeField, Min(1)] private int _detectionRadius = 5;
         [SerializeField, Min(1)] private int _alertRadius = 4;
+        [Tooltip("Actions this enemy gets each enemy phase. A step costs 1 (1.5 diagonal), an ability costs its Action Cost. Raise it for fast or dangerous enemies.")]
+        [SerializeField, Min(1)] private int _actionsPerTurn = 3;
 
         [Header("Rewards")]
         [Tooltip("XP earned when this enemy dies. The killer gets it in full, the rest of the living party gets a share (see LevelUpRules).")]
@@ -68,6 +70,7 @@ namespace DungeonTower.Items
         public IArmor Armor => _armor;
         public int DetectionRadius => _detectionRadius;
         public int AlertRadius => _alertRadius;
+        public int ActionsPerTurn => Mathf.Max(1, _actionsPerTurn);
         public int XpReward => _xpReward;
         public float DropChance => _dropChance;
 
