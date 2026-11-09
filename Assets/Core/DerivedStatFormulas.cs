@@ -8,9 +8,9 @@ namespace DungeonTower.Core
     /// design pass and expected to move once we're playtesting.
     ///
     /// Who owns what:
-    ///   Body   - Max HP, Physical Attack/Defense, healing received, 40% of Initiative
-    ///   Mind   - Max MP, Magic Attack/Defense, 35% of Initiative
-    ///   Spirit - Status Resist, Potency, Support Power, MP regen, 25% of Initiative
+    ///   Body   - Max HP, Physical Attack/Defense, healing received
+    ///   Mind   - Max MP, Magic Attack/Defense
+    ///   Spirit - Status Resist, Potency, Support Power, MP regen
     /// Move Range and Crit Chance no longer come from stats at all: Move is a
     /// fixed base (plus gear/statuses) and Crit comes from the ability used
     /// (plus gear).
@@ -35,14 +35,6 @@ namespace DungeonTower.Core
         public const float PotencyPerSpirit = 2.5f;     // percent: added to status apply chance AND scales status strength
         public const float SupportPowerPerSpirit = 1.5f; // same scale as attack; feeds Heal abilities
         public const float MpRegenPerSpirit = 1f / 3f;   // MP per own turn (in combat); fractions carry over
-
-        // --- Initiative: every stat contributes, Body most and Spirit least ---
-        public const float InitiativeWeightBody = 0.40f;
-        public const float InitiativeWeightMind = 0.35f;
-        public const float InitiativeWeightSpirit = 0.25f;
-        // 1 keeps a 3/3/3 hero at Initiative 3, same as before. Raise it for finer
-        // turn-order resolution (fewer ties) without changing who goes first.
-        public const float InitiativeScale = 1f;
 
         // --- Movement: no stat contribution any more ---
         public const float MoveRangeBase = 4f;          // tiles, for everyone; gear and statuses modify it
@@ -69,11 +61,6 @@ namespace DungeonTower.Core
         public static float Potency(StatBlock stats) => stats.Spirit * PotencyPerSpirit;
         public static float SupportPower(StatBlock stats) => stats.Spirit * SupportPowerPerSpirit;
         public static float MpRegen(StatBlock stats) => stats.Spirit * MpRegenPerSpirit;
-
-        public static int Initiative(StatBlock stats)
-            => RoundToInt(InitiativeScale * (stats.Body * InitiativeWeightBody
-                                             + stats.Mind * InitiativeWeightMind
-                                             + stats.Spirit * InitiativeWeightSpirit));
 
         public static int MoveRange(StatBlock stats) => RoundToInt(MoveRangeBase);
 

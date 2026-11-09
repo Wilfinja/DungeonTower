@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using DungeonTower.Combat;
 using DungeonTower.Core;
 using DungeonTower.Items;
 
@@ -429,7 +430,7 @@ namespace DungeonTower.UI
                     $"HP {s.MaxHp}   MP {s.MaxMp}\n" +
                     $"Physical Attack {UiText.Num(s.PhysicalAttack)}   Defense {UiText.Num(s.PhysicalDefense)}\n" +
                     $"Magic Attack {UiText.Num(s.MagicAttack)}   Defense {UiText.Num(s.MagicDefense)}\n" +
-                    $"Initiative {s.Initiative}   Move {s.MoveRange}";
+                    $"Actions per turn {ActionPoints.BaseActions}";
             }
 
             FillDropdown(_weaponDropdown, _weaponOptions, d, d.Weapon, "No weapon");

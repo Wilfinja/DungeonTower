@@ -95,6 +95,8 @@ namespace DungeonTower.Items
         [Header("Cost")]
         [Tooltip("MP spent each time this is used from a weapon or read from a scroll. 0 = free. Potions never charge MP, whatever this says.")]
         [SerializeField, Min(0)] private int _mpCost;
+        [Tooltip("How many actions this costs a hero (they get 3 per turn; a step costs 1, a diagonal step 1.5). Enemies ignore this.")]
+        [SerializeField, Range(1, 3)] private int _actionCost = 1;
 
         [Header("Visuals")]
         [SerializeField] private AbilityVisuals _visuals = new AbilityVisuals();
@@ -119,6 +121,7 @@ namespace DungeonTower.Items
         public int AreaRadius => _areaRadius;
         public int CooldownTurns => _cooldownTurns;
         public int MpCost => _mpCost;
+        public int ActionCost => Mathf.Max(1, _actionCost);
         public bool Silenceable => _silenceable;
 
         // Never null, even for an asset serialized before these fields existed.

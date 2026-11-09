@@ -51,6 +51,10 @@ namespace DungeonTower.Core
         float HealSupportMultiplier { get; }
         int MpCost {  get; }
 
+        // How many of the user's per-phase actions this takes (1 or 2 for
+        // most abilities). Spent from the hero's action pool when used.
+        int ActionCost { get; }
+
         // Buff-only — applied as a permanent-for-the-battle addition,
         // same DerivedStatBonus shape ArmorSO already grants passively.
         // (Timed stat modifiers are Statuses, not this.)

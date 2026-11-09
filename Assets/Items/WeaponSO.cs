@@ -23,7 +23,7 @@ namespace DungeonTower.Items
         [Tooltip("Legacy single requirement - only used while the list above is empty.")]
         [SerializeField] private PrimaryStat _requiredStat;
         [SerializeField, Min(0)] private int _requiredStatValue = 4;
-        [Tooltip("Flat bonuses while equipped (negative allowed: a heavy weapon can cost Initiative).")]
+        [Tooltip("Flat bonuses while equipped (negative allowed: a heavy weapon can cost Defense).")]
         [SerializeField] private DerivedStatBonus _passiveBonus;
         [SerializeField] private List<AbilitySO> _abilities = new List<AbilitySO>();
         [SerializeField] private bool _dropsOnDeath = true;

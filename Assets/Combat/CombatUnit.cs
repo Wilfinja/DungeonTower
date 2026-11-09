@@ -39,6 +39,18 @@ namespace DungeonTower.Combat
         public Belt Belt { get; } = new Belt(BeltSlotCount);
         public StatusEffectTracker Status { get; }
 
+        // A hero's actions for the current phase (movement, abilities, gear
+        // swaps all spend from it). Enemies don't use it.
+        public ActionPoints Actions { get; } = new ActionPoints();
+
+        // Start of this unit's side's phase: refill actions (plus anything
+        // banked), +1 with Haste, -1 with Slow.
+        public void BeginActionPhase()
+        {
+            int bonus = (Status.Has(StatusEffectId.Haste) ? 1 : 0) - (Status.Has(StatusEffectId.Slow) ? 1 : 0);
+            Actions.BeginPhase(bonus);
+        }
+
         // What this unit (and its alerted pack — see
         // BattleController.RecordSighting) last actually saw of each
         // hostile. Present on every unit for the same reason

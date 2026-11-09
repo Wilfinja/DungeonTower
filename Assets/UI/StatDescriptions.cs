@@ -23,8 +23,7 @@ namespace DungeonTower.UI
                         + $"+{UiText.Num(DerivedStatFormulas.HpPerBody)} Max HP per point\n"
                         + $"+{UiText.Num(DerivedStatFormulas.PhysicalAttackPerBody)} Physical Attack per point\n"
                         + $"+{UiText.Num(DerivedStatFormulas.PhysicalDefensePerBody)} Physical Defense per point\n"
-                        + $"+{UiText.Num(DerivedStatFormulas.HealingReceivedPerBody)}% healing received per point\n"
-                        + $"{UiText.Num(DerivedStatFormulas.InitiativeWeightBody * 100f)}% of Initiative"
+                        + $"+{UiText.Num(DerivedStatFormulas.HealingReceivedPerBody)}% healing received per point"
                         + (showCurrent
                             ? $"\n<i>Right now: {UiText.Num(points * DerivedStatFormulas.HpPerBody)} HP, "
                               + $"{UiText.Num(points * DerivedStatFormulas.PhysicalAttackPerBody)} Physical Attack, "
@@ -38,8 +37,7 @@ namespace DungeonTower.UI
                         + $"+{UiText.Num(DerivedStatFormulas.MpPerMind)} Max MP per point\n"
                         + $"+{UiText.Num(DerivedStatFormulas.MagicAttackPerMind)} Magic Attack per point\n"
                         + $"+{UiText.Num(DerivedStatFormulas.MagicDefensePerMind)} Magic Defense per point "
-                        + $"(never below {UiText.Num(DerivedStatFormulas.MagicDefenseFloor)})\n"
-                        + $"{UiText.Num(DerivedStatFormulas.InitiativeWeightMind * 100f)}% of Initiative"
+                        + $"(never below {UiText.Num(DerivedStatFormulas.MagicDefenseFloor)})"
                         + (showCurrent
                             ? $"\n<i>Right now: {UiText.Num(points * DerivedStatFormulas.MpPerMind)} MP, "
                               + $"{UiText.Num(points * DerivedStatFormulas.MagicAttackPerMind)} Magic Attack, "
@@ -54,8 +52,7 @@ namespace DungeonTower.UI
                         + $"+{UiText.Num(DerivedStatFormulas.PotencyPerSpirit)}% Potency per point "
                         + "(more likely to land statuses, and they hit harder)\n"
                         + $"+{UiText.Num(DerivedStatFormulas.SupportPowerPerSpirit)} Support Power per point (healing)\n"
-                        + $"+1 MP per turn in combat for every {UiText.Num(1f / DerivedStatFormulas.MpRegenPerSpirit)} points\n"
-                        + $"{UiText.Num(DerivedStatFormulas.InitiativeWeightSpirit * 100f)}% of Initiative"
+                        + $"+1 MP per turn in combat for every {UiText.Num(1f / DerivedStatFormulas.MpRegenPerSpirit)} points"
                         + (showCurrent
                             ? $"\n<i>Right now: {UiText.Num(System.Math.Min(DerivedStatFormulas.StatusResistCap, points * DerivedStatFormulas.StatusResistPerSpirit))}% Status Resist, "
                               + $"{UiText.Num(points * DerivedStatFormulas.PotencyPerSpirit)}% Potency, "

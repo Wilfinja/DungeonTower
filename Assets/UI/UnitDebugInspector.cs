@@ -111,7 +111,8 @@ namespace DungeonTower.UI
         [DebugReadOnly, SerializeField] private float physicalDefense;
         [DebugReadOnly, SerializeField] private float magicAttack;
         [DebugReadOnly, SerializeField] private float magicDefense;
-        [DebugReadOnly, SerializeField] private int initiative;
+        [DebugReadOnly, SerializeField] private float actionsRemaining;
+        [DebugReadOnly, SerializeField] private float actionsBanked;
         [DebugReadOnly, SerializeField] private int moveRange;
         [DebugReadOnly, SerializeField] private float statusResist;
         [DebugReadOnly, SerializeField] private float critChance;
@@ -332,7 +333,8 @@ namespace DungeonTower.UI
             physicalDefense = s.PhysicalDefense;
             magicAttack = s.MagicAttack;
             magicDefense = s.MagicDefense;
-            initiative = s.Initiative;
+            actionsRemaining = _unit.Actions.Remaining / (float)ActionPoints.HalfPerAction;
+            actionsBanked = _unit.Actions.Banked / (float)ActionPoints.HalfPerAction;
             moveRange = s.MoveRange;
             statusResist = s.StatusResist;
             critChance = s.CritChance;

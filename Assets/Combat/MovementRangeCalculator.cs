@@ -24,5 +24,19 @@ namespace DungeonTower.Combat
             reachable.Remove(origin);
             return reachable;
         }
+
+        // Same, but the budget is given directly in half-steps (what a hero
+        // has left in their action pool) rather than as whole tiles.
+        public static HashSet<GridPosition> GetReachableTilesWithBudget(
+            GridPosition origin, int budgetHalfSteps, IWalkableMap map,
+            IReadOnlyCollection<GridPosition> occupiedTiles = null)
+        {
+            var blocked = occupiedTiles != null ? new HashSet<GridPosition>(occupiedTiles) : null;
+            var costs = GridSteps.CostMap(origin, map, blocked, budgetHalfSteps);
+
+            var reachable = new HashSet<GridPosition>(costs.Keys);
+            reachable.Remove(origin);
+            return reachable;
+        }
     }
 }
