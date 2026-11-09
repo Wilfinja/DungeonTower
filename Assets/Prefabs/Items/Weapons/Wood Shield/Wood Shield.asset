@@ -10,9 +10,9 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e5cef53eb1f2df04b9775a6e42b8dffe, type: 3}
-  m_Name: Wooden Shield
+  m_Name: Wood Shield
   m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.WeaponSO
-  _weaponName: Wooden Shield
+  _weaponName: Wood Shield
   _group: 2
   _hands: 1
   _requirements:
@@ -27,7 +27,6 @@ MonoBehaviour:
     PhysicalDefense: 5
     MagicAttack: 0
     MagicDefense: 0
-    Initiative: 0
     MoveRange: 0
     StatusResist: 0
     CritChance: 0
