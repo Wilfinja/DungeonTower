@@ -853,6 +853,20 @@ namespace DungeonTower.UI
             ResolveHeroAction();
         }
 
+        private bool _wasInCombat;
+
+        // Combat starting or ending refills every hero's actions, so a fight
+        // always opens with the heroes at full and exploring never leaves
+        // anyone stranded with an empty pool.
+        private void SyncCombatState()
+        {
+            bool inCombat = IsInCombat();
+            if (inCombat == _wasInCombat) return;
+            _wasInCombat = inCombat;
+            foreach (var hero in _partyMembers.Where(h => h.IsAlive)) hero.BeginActionPhase();
+            Debug.Log(inCombat ? "Combat begins!" : "Combat is over.");
+        }
+
         private void ResolveHeroAction()
         {
             _battle.ReevaluateOutcome();
@@ -861,6 +875,8 @@ namespace DungeonTower.UI
                 BeginTurn();   // shows the outcome
                 return;
             }
+
+            SyncCombatState();
 
             var hero = _battle.CurrentUnit;
             if (hero == null || !hero.IsAlive || !hero.Actions.CanAct)
@@ -973,6 +989,15 @@ namespace DungeonTower.UI
 
             switch (mode)
             {
+                case ActionMode.Move when !IsInCombat():
+                    // Exploring: the leader can walk to any discovered tile, no actions spent,
+                    // so there's no range overlay — the path dots show the way.
+                    _selectedAbilityIndex = 0;
+                    _reachableTiles = ExplorationReachable(unit);
+                    _gridView.SetHighlights(Enumerable.Empty<GridPosition>(), Enumerable.Empty<GridPosition>());
+                    _abilityBar.SetSelected(-1);
+                    break;
+
                 case ActionMode.Move:
                     _selectedAbilityIndex = 0;
                     _reachableTiles = unit.Status.CanMove
@@ -1046,6 +1071,143 @@ namespace DungeonTower.UI
             }
             StartCoroutine(WalkPath(unit, path));
         }
+
+        // ---- Exploration (no enemy alerted) -------------------------------
+        // The selected hero leads and the rest of the party trails behind,
+        // each heading for the tile the hero ahead of them just left. It
+        // costs no actions. Every step the leader takes, each idle enemy
+        // takes one too, and the walk stops the moment a fight starts or a
+        // new enemy comes into view.
+
+        // Only enemies get in the party's way; heroes swap places freely.
+        private List<GridPosition> ExplorationBlockers()
+            => _unitViews.Keys.Where(u => u.IsAlive && u.Faction != Faction.Player).Select(u => u.Position).ToList();
+
+        // Every discovered tile the leader can walk to.
+        private HashSet<GridPosition> ExplorationReachable(CombatUnit leader)
+        {
+            var result = new HashSet<GridPosition> { leader.Position };
+            if (!leader.Status.CanMove) return result;
+
+            var blocked = new HashSet<GridPosition>(ExplorationBlockers());
+            var costs = GridSteps.CostMap(leader.Position, _movementMap, blocked, 100000);
+            foreach (var tile in costs.Keys)
+                if (_fog.IsExplored(tile)) result.Add(tile);
+            foreach (var hero in _partyMembers)
+                if (hero != leader && hero.IsAlive) result.Remove(hero.Position);
+            return result;
+        }
+
+        private IEnumerator ExplorationWalk(CombatUnit leader, GridPosition destination)
+        {
+            _movesInProgress++;
+            try
+            {
+                _gridView.SetHighlights(Enumerable.Empty<GridPosition>(), Enumerable.Empty<GridPosition>());
+
+                var path = PathFinder.FindPath(leader.Position, destination, _movementMap, ExplorationBlockers());
+                if (path.Count == 0) yield break;
+
+                // Leader first, then the others in party order.
+                var party = new List<CombatUnit> { leader };
+                party.AddRange(_partyMembers.Where(h => h != leader && h.IsAlive));
+
+                // Once-per-move effects (Bleed, Momentum), as for any move.
+                foreach (var hero in party.ToList())
+                {
+                    var moveTick = hero.Status.OnMoved();
+                    foreach (var line in moveTick.Log) Debug.Log(line);
+                    if (moveTick.OwnerDied)
+                    {
+                        _unitViews[hero].Refresh();
+                        HandleDeath(hero);
+                        party.Remove(hero);
+                        continue;
+                    }
+                    foreach (var ended in _battlefieldObjects.RemoveOwnedByMovement(hero))
+                        Debug.Log($"{hero.DisplayName}'s {ended.Name} fades as they move.");
+                }
+                if (!party.Contains(leader)) yield break;
+
+                var seen = new HashSet<CombatUnit>(
+                    _unitViews.Keys.Where(u => u.IsAlive && u.Faction == Faction.Enemy && _fog.IsCurrentlyVisible(u.Position)));
+
+                foreach (var tile in path)
+                {
+                    if (!leader.Status.CanMove) break;
+                    var blocker = FindLivingUnitAt(tile);
+                    if (blocker != null && blocker.Faction != Faction.Player) break;   // a roamer wandered into the way
+
+                    // 1) Plan one step for everybody...
+                    var planned = new Dictionary<CombatUnit, GridPosition> { [leader] = tile };
+                    var aheadOld = leader.Position;
+                    for (int i = 1; i < party.Count; i++)
+                    {
+                        var follower = party[i];
+                        var followerOld = follower.Position;
+                        if (follower.Status.CanMove)
+                        {
+                            var occupied = PositionsExcept(follower, planned);
+                            if (!occupied.Contains(aheadOld))
+                            {
+                                var route = PathFinder.FindPath(follower.Position, aheadOld, _movementMap, occupied);
+                                if (route.Count > 0 && !occupied.Contains(route[0])) planned[follower] = route[0];
+                            }
+                        }
+                        aheadOld = followerOld;
+                    }
+
+                    foreach (var enemy in _unitViews.Keys.Where(u => u.IsAlive && u.Faction == Faction.Enemy && !u.IsAlerted).ToList())
+                    {
+                        if (!enemy.Status.CanMove) continue;
+                        var step = RoamAI.ChooseStep(enemy, _movementMap, PositionsExcept(enemy, planned), _rng, 1);
+                        if (step.HasValue) planned[enemy] = step.Value;
+                    }
+
+                    // 2) ...slide everyone at once...
+                    foreach (var pair in planned) _unitViews[pair.Key].StepTo(pair.Value);
+                    while (planned.Keys.Any(u => _unitViews[u].IsMoving)) yield return null;
+
+                    // 3) ...then the game state catches up (doors, traps, fog).
+                    foreach (var pair in planned)
+                    {
+                        var unit = pair.Key;
+                        if (!unit.IsAlive) continue;
+                        unit.Position = pair.Value;
+                        _unitViews[unit].Refresh();
+                        ResolveBattlefieldEntry(unit, pair.Value);
+                    }
+
+                    party.RemoveAll(h => !h.IsAlive);
+                    if (!leader.IsAlive) yield break;
+
+                    // 4) Does anybody notice us?
+                    foreach (var enemy in _unitViews.Keys.Where(u => u.IsAlive && u.Faction == Faction.Enemy && !u.IsAlerted).ToList())
+                    {
+                        var nearest = FindNearestPlayer(enemy);
+                        if (nearest == null || !enemy.CanSense(nearest.Position, _sightMap)) continue;
+                        AlertUnit(enemy);
+                        Debug.Log($"{enemy.DisplayName} spots {nearest.DisplayName}!");
+                        RecordSighting(enemy, nearest);
+                    }
+                    if (IsInCombat()) break;
+
+                    // 5) Stop when something new shows up.
+                    bool newSighting = false;
+                    foreach (var enemy in _unitViews.Keys.Where(u => u.IsAlive && u.Faction == Faction.Enemy && _fog.IsCurrentlyVisible(u.Position)))
+                        if (seen.Add(enemy)) { Debug.Log($"You spot {enemy.DisplayName}."); newSighting = true; }
+                    if (newSighting) break;
+                }
+            }
+            finally { _movesInProgress--; }
+        }
+
+        // Where everyone alive stands (or is about to stand), except `exclude`.
+        private List<GridPosition> PositionsExcept(CombatUnit exclude, Dictionary<CombatUnit, GridPosition> planned)
+            => _unitViews.Keys
+                .Where(u => u.IsAlive && u != exclude)
+                .Select(u => planned.TryGetValue(u, out var next) ? next : u.Position)
+                .ToList();
 
         private IEnumerator WalkPath(CombatUnit unit, List<GridPosition> path)
         {
@@ -1679,7 +1841,8 @@ namespace DungeonTower.UI
             if (_pendingMoveTile.HasValue && _pendingMoveTile.Value.Equals(target))
             {
                 ClearPathPreview();   // second click on the same tile: go
-                MoveUnit(acting, target);
+                if (IsInCombat()) MoveUnit(acting, target);
+                else StartCoroutine(ExplorationWalk(acting, target));   // the party follows, roamers step along
                 AfterHeroAction();
                 return;
             }
@@ -1693,7 +1856,8 @@ namespace DungeonTower.UI
             _pendingMoveTile = target;
             if (_pathDotPrefab == null) return;
 
-            var path = PathFinder.FindPath(unit.Position, target, _movementMap, OccupiedTilesExcluding(unit));
+            var path = PathFinder.FindPath(unit.Position, target, _movementMap,
+                IsInCombat() ? OccupiedTilesExcluding(unit) : ExplorationBlockers());
             foreach (var tile in path)
             {
                 var dot = Instantiate(_pathDotPrefab, transform);
@@ -1721,7 +1885,7 @@ namespace DungeonTower.UI
             if (isScroll) acting.Belt.TryConsume(_pendingScroll);
             _pendingScroll = null;
 
-            acting.Actions.SpendActions(ability.ActionCost);
+            if (IsInCombat()) acting.Actions.SpendActions(ability.ActionCost);   // free while exploring
             StartCoroutine(TrackedAction(PerformAbility(acting, ability, target)));
             AfterHeroAction();
         }
