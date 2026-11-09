@@ -57,6 +57,8 @@ namespace DungeonTower.Items
         [SerializeField] private SupportTargetingStrategy _supportTargetingStrategy = SupportTargetingStrategy.LowestHpPercent;
         [Tooltip("An ally is worth healing when their HP is at or below this percent of max. Only affects Heal-kind support abilities.")]
         [SerializeField, Range(0, 100)] private float _supportHealThreshold = 50f;
+        [Tooltip("How many actions does the enemy have?")]
+        [SerializeField] public int actionPoints;
 
         public string DisplayName => _displayName;
         public EnemyRole Role => _role;
