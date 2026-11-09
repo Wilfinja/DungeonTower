@@ -11,16 +11,18 @@ namespace DungeonTower.Combat
     /// respecting walls and occupied tiles via the same movement-range
     /// logic combat uses everywhere else. A unit with no roam zone simply
     /// doesn't roam: ChooseStep returns null and it stays put, exactly the
-    /// behavior idle enemies had before roaming existed.
+    /// behavior idle enemies had before roaming existed. moveRange overrides
+    /// the unit's own (1 = a single orthogonal step, used while the party explores).
     /// </summary>
     public static class RoamAI
     {
         public static GridPosition? ChooseStep(
-            CombatUnit unit, IWalkableMap map, IReadOnlyCollection<GridPosition> occupiedTiles, Random rng)
+            CombatUnit unit, IWalkableMap map, IReadOnlyCollection<GridPosition> occupiedTiles, Random rng,
+            int moveRange = -1)
         {
             if (unit.RoamZone == null || unit.RoamZone.Count == 0) return null;
 
-            var reachable = MovementRangeCalculator.GetReachableTiles(unit.Position, unit.Stats.MoveRange, map, occupiedTiles);
+            var reachable = MovementRangeCalculator.GetReachableTiles(unit.Position, moveRange >= 0 ? moveRange : unit.Stats.MoveRange, map, occupiedTiles);
             var candidates = reachable.Where(pos => unit.RoamZone.Contains(pos)).ToList();
             if (candidates.Count == 0) return null;
 
