@@ -2459,34 +2459,131 @@ namespace DungeonTower.UI
             }
 
             if (ability.PushDistance != 0)
-                ApplyPush(attacker, target, ability.PushDistance);
+                _pendingPushes.Add((attacker, target, ability));   // played out by PerformAbility, tile by tile
         }
 
-        // Moves `target` up to Abs(distance) tiles along the
-        // attacker->target line — away from the attacker if positive,
-        // toward it if negative — stopping early at the first wall or
-        // occupied tile. No bonus damage for a "wall splat".
-        private void ApplyPush(CombatUnit attacker, CombatUnit target, int distance)
-        {
-            var (dx, dy) = CardinalDirectionFrom(attacker.Position, target.Position);
-            bool pulling = distance < 0;
-            var current = target.Position;
+        private readonly List<(CombatUnit attacker, CombatUnit target, IAbility ability)> _pendingPushes
+            = new List<(CombatUnit, CombatUnit, IAbility)>();
 
-            for (int i = 0; i < Math.Abs(distance); i++)
+        // Plays out every push/pull the ability just queued. A push sends the
+        // farthest targets first and a pull the nearest first, so a crowd
+        // doesn't block itself.
+        private IEnumerator PlayPendingPushes(CombatUnit attacker, IAbility ability)
+        {
+            if (_pendingPushes.Count == 0) yield break;
+
+            var pushes = _pendingPushes.ToList();
+            _pendingPushes.Clear();
+            bool pulling = ability.PushDistance < 0;
+            pushes = (pulling
+                ? pushes.OrderBy(p => p.target.Position.ManhattanDistance(attacker.Position))
+                : pushes.OrderByDescending(p => p.target.Position.ManhattanDistance(attacker.Position))).ToList();
+
+            foreach (var push in pushes)
+                yield return StartCoroutine(PushRoutine(push.attacker, push.target, push.ability));
+        }
+
+        // Moves `target` along the attacker->target line (away if the
+        // distance is positive, toward the attacker if negative), one tile
+        // at a time so traps fire along the way. It stops at the first wall,
+        // closed door, object or unit (PushMode.Collide), and every unused
+        // tile turns into flat slam damage for it and for whatever it hit.
+        private IEnumerator PushRoutine(CombatUnit attacker, CombatUnit target, IAbility ability)
+        {
+            if (!target.IsAlive) yield break;
+
+            int total = Math.Abs(ability.PushDistance);
+            bool pulling = ability.PushDistance < 0;
+            var (dx, dy) = CardinalDirectionFrom(attacker.Position, target.Position);
+            if (pulling) { dx = -dx; dy = -dy; }
+
+            var view = _unitViews[target];
+            bool show = attacker.Faction == Faction.Player || _fog.IsCurrentlyVisible(target.Position);
+
+            int moved = 0;
+            bool collided = false;
+            CombatUnit hitUnit = null;
+            BattlefieldObject hitObject = null;
+            GridPosition collisionTile = target.Position;
+
+            for (int i = 0; i < total; i++)
             {
-                var next = pulling
-                    ? new GridPosition(current.X - dx, current.Y - dy)
-                    : new GridPosition(current.X + dx, current.Y + dy);
-                if (!_movementMap.IsWalkable(next) || FindLivingUnitAt(next) != null) break;
-                current = next;
+                var next = new GridPosition(target.Position.X + dx, target.Position.Y + dy);
+
+                if (!_movementMap.IsWalkable(next))
+                {
+                    collided = true;
+                    collisionTile = next;
+                    hitObject = _battlefieldObjects.At(next).FirstOrDefault(o => o.MaxHp.HasValue);
+                    break;
+                }
+
+                var occupant = FindLivingUnitAt(next);
+                if (occupant != null)
+                {
+                    collisionTile = next;
+                    if (occupant == attacker && pulling) break;   // pulled right up to the caster: just stop
+                    collided = true;
+                    hitUnit = occupant;
+                    break;
+                }
+
+                if (show)
+                {
+                    view.StepTo(next);
+                    while (view.IsMoving) yield return null;
+                }
+                target.Position = next;
+                view.Refresh();
+                moved++;
+                ResolveBattlefieldEntry(target, next);   // traps + fog, per tile
+                if (!target.IsAlive) yield break;
             }
 
-            if (current.Equals(target.Position)) return;
+            if (moved > 0)
+                Debug.Log($"{target.DisplayName} is {(pulling ? "pulled" : "pushed")} {moved} tile{(moved == 1 ? "" : "s")}.");
 
-            target.Position = current;
-            _unitViews[target].Refresh();
-            Debug.Log($"{target.DisplayName} is {(pulling ? "pulled" : "pushed")} to ({current.X},{current.Y}).");
-            ResolveBattlefieldEntry(target, current);
+            int slam = collided ? (total - moved) * ability.SlamDamagePerTile : 0;
+            if (slam <= 0) yield break;
+
+            var records = new List<HitRecord>();
+            Debug.Log($"{target.DisplayName} slams into {(hitUnit != null ? hitUnit.DisplayName : hitObject != null ? hitObject.Name : "the wall")} for {slam}.");
+            ApplySlamDamage(attacker, target, slam, records);
+            if (hitUnit != null) ApplySlamDamage(attacker, hitUnit, slam, records);
+            if (hitObject != null) DamageBattlefieldObjectFlat(hitObject, slam);
+
+            var visuals = (ability as AbilitySO)?.Visuals;
+            records.RemoveAll(h => !_fog.IsCurrentlyVisible(h.Tile));
+            if (visuals != null && _hitFeedback != null && records.Count > 0)
+                yield return _hitFeedback.Play(visuals, records.ToArray(),
+                    GridToWorld.ToWorldPosition(target.Position), GridToWorld.ToWorldPosition(collisionTile));
+        }
+
+        // Flat slam damage: no armor, defense, crit or reflect.
+        private void ApplySlamDamage(CombatUnit source, CombatUnit victim, int amount, List<HitRecord> records)
+        {
+            if (!victim.IsAlive) return;
+
+            int hpBefore = victim.CurrentHp;
+            victim.ApplyDamage(amount);
+            _unitViews[victim].Refresh();
+            if (victim.Faction != source.Faction) AlertUnit(victim);
+
+            bool died = !victim.IsAlive;
+            records.Add(HitRecord.Damage(_unitViews[victim], victim.Position, hpBefore - victim.CurrentHp, 0, false, died));
+            if (died) HandleDeath(victim, victim == source ? null : source);
+        }
+
+        private void DamageBattlefieldObjectFlat(BattlefieldObject obj, int amount)
+        {
+            obj.CurrentHp -= amount;
+            Debug.Log($"{obj.Name} takes {amount} slam damage.");
+            if (obj.CurrentHp <= 0)
+            {
+                _battlefieldObjects.Remove(obj);
+                Debug.Log($"{obj.Name} is destroyed!");
+            }
+            RefreshFogOfWar();
         }
 
         // Same cardinal-snap rule AreaOfEffect uses for Line/Cone,
@@ -3201,6 +3298,8 @@ namespace DungeonTower.UI
 
             if (show && (visuals.ImpactEffectPrefab != null || visuals.AreaEffectPrefab != null))
                 yield return new WaitForSeconds(visuals.ImpactHoldSeconds);
+
+            yield return StartCoroutine(PlayPendingPushes(attacker, ability));
         }
 
         private static Vector3 HitOrigin(CombatUnit attacker, IAbility ability, GridPosition impactTile)

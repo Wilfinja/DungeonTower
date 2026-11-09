@@ -277,6 +277,8 @@ namespace DungeonTower.UI
             else if (ability.PushDistance < 0)
                 sb.Append($"\nPulls the target {-ability.PushDistance} tile{(ability.PushDistance == -1 ? "" : "s")} closer");
 
+            if (ability.PushDistance != 0 && ability.SlamDamagePerTile > 0)
+                sb.Append($"\nHitting something deals {ability.SlamDamagePerTile} damage per unused tile");
             if (ability.SwapWithCaster) sb.Append("\nSwaps places with the target");
         }
 

@@ -60,6 +60,10 @@ namespace DungeonTower.Items
         [Header("Push / Pull / Swap (any EffectKind)")]
         [Tooltip("Tiles to knock the target away from the attacker; negative pulls it toward the attacker instead. 0 = none.")]
         [SerializeField] private int _pushDistance;
+        [Tooltip("What happens when the target hits something. Collide: it stops, and each tile of the push it didn't get to travel becomes slam damage to it and to whatever it hit.")]
+        [SerializeField] private PushMode _pushMode = PushMode.Collide;
+        [Tooltip("Flat damage per unused tile of the push when the target collides (ignores armor and defense). 0 = collisions do no damage.")]
+        [SerializeField, Min(0)] private int _slamDamagePerTile = 3;
         [Tooltip("Instantly swaps the attacker's and target's positions. Don't combine with a nonzero Push Distance.")]
         [SerializeField] private bool _swapWithCaster;
 
@@ -131,6 +135,8 @@ namespace DungeonTower.Items
             => _cleanses ?? (IReadOnlyList<StatusEffectId>)Array.Empty<StatusEffectId>();
 
         public int PushDistance => _pushDistance;
+        public PushMode PushMode => _pushMode;
+        public int SlamDamagePerTile => _slamDamagePerTile;
         public bool SwapWithCaster => _swapWithCaster;
 
         public SummonTriggerMode SummonTriggerMode => _summonTriggerMode;

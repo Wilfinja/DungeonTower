@@ -96,6 +96,11 @@ namespace DungeonTower.Core
         // own tile (a self-hit never pushes itself).
         int PushDistance { get; }
 
+        // What the push does when the target hits something (see PushMode),
+        // and how much flat damage each unused tile of the push turns into.
+        PushMode PushMode { get; }
+        int SlamDamagePerTile { get; }
+
         // Applies to any EffectKind: instantly swaps the attacker's and
         // the target's positions instead of (or in addition to, though
         // authoring both is nonsensical — pick one) pushing. False for
