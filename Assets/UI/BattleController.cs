@@ -552,7 +552,8 @@ namespace DungeonTower.UI
     new UnitStats(enemySO.Stats), position,
     enemySO.DetectionRadius, enemySO.AlertRadius,
     enemySO.TargetingStrategy, enemySO.TargetingRange,
-    enemySO.SupportTargetingStrategy, enemySO.SupportHealThreshold);
+    enemySO.SupportTargetingStrategy, enemySO.SupportHealThreshold,
+    enemySO.ActionsPerTurn);
             unit.TryEquip(enemySO.Weapon, HandSlot.Main, out _);
             if (enemySO.OffHand != null) unit.TryEquip(enemySO.OffHand, HandSlot.Off, out _);
             unit.Stats.TryEquipArmor(enemySO.Armor);
@@ -677,6 +678,7 @@ namespace DungeonTower.UI
             }
             var startTick = unit.Status.OnTurnStart();
             foreach (var line in startTick.Log) Debug.Log(line);
+            unit.BeginActionPhase();   // enemy action pool for this phase
             _unitViews[unit].Refresh();
             if (startTick.OwnerDied)
             {
@@ -1789,7 +1791,7 @@ namespace DungeonTower.UI
             // knows exactly how hurt its own side is.
             if (TryPickSupportAction(enemy, out var supportAbility, out var supportTarget))
             {
-                ActOnTarget(enemy, supportTarget.Position, supportAbility);
+                ActOnTarget(enemy, supportTarget.Position, supportAbility, supportTarget);
                 return;
             }
 
@@ -1806,14 +1808,14 @@ namespace DungeonTower.UI
             var forced = TauntRules.GetForcedTarget(enemy);
             if (forced != null)
             {
-                ActOnTarget(enemy, forced.Position, GetEnemyOffenseAbility(enemy));
+                ActOnTarget(enemy, forced.Position, GetEnemyOffenseAbility(enemy), forced);
                 return;
             }
 
             var (target, believedPosition) = PickKnownTarget(enemy);
             if (target != null)
             {
-                ActOnTarget(enemy, believedPosition, GetEnemyOffenseAbility(enemy));
+                ActOnTarget(enemy, believedPosition, GetEnemyOffenseAbility(enemy), target);
                 return;
             }
 
@@ -1921,31 +1923,140 @@ namespace DungeonTower.UI
         // anyone) isn't the target, ExecuteAbilityAt simply finds no
         // living unit at that tile and the attack fizzles; that's
         // correct, not a bug.
-        private void ActOnTarget(CombatUnit enemy, GridPosition believedPosition, IAbility ability)
+        private void ActOnTarget(CombatUnit enemy, GridPosition believedPosition, IAbility ability, CombatUnit target = null)
         {
-            int range = ability?.Range ?? 1;
+            const int Half = ActionPoints.HalfPerAction;
+            int budget = enemy.Actions.Remaining;     // half-steps; 1 action = 2
+            var from = enemy.Position;                // where the enemy will stand once its (deferred) move plays out
+            var usedCooldowns = new HashSet<IAbility>();
+            int mpLeft = enemy.CurrentMp;
 
-            if (enemy.Position.IsWithinRange(believedPosition, range)
-                && LineOfSight.HasClearPath(enemy.Position, believedPosition, _sightMap))
-            {
-                if (ability != null)
-                    _swarmAttacks.Add((enemy, PerformAbility(enemy, ability, believedPosition)));
-                EndTurn();
-                return;
-            }
+            bool InRange(GridPosition pos, IAbility a)
+                => pos.IsWithinRange(believedPosition, a?.Range ?? 1)
+                   && LineOfSight.HasClearPath(pos, believedPosition, _sightMap);
 
-            if (enemy.Status.CanMove)
+            // 1) Close the distance if the target isn't in range yet, leaving
+            //    enough actions over for the ability when the map allows.
+            if (!InRange(from, ability) && enemy.Status.CanMove)
             {
-                var reachable = MovementRangeCalculator.GetReachableTiles(
-                    enemy.Position, enemy.Stats.MoveRange, _movementMap, OccupiedTilesExcluding(enemy));
-                if (reachable.Count > 0)
+                int reserve = ability != null ? ability.ActionCost * Half : 0;
+                int spent = PlanEnemyMove(enemy, believedPosition, ability?.Range ?? 1, budget, reserve);
+                if (spent > 0)
                 {
-                    var step = ChooseEnemyStep(enemy, believedPosition, range, reachable);
-                    if (step.HasValue) MoveUnit(enemy, step.Value);
+                    budget -= spent;
+                    from = _swarmReserved[enemy];
                 }
             }
 
+            // 2) Spend what's left on the ability, as many times as it fits.
+            //    Cooldowns and MP are checked against what this plan has
+            //    already used, since the real spend happens when it plays out.
+            bool support = ability != null && AbilityTargeting.TargetsAllies(ability);
+            while (ability != null && InRange(from, ability) && budget >= ability.ActionCost * Half)
+            {
+                _swarmAttacks.Add((enemy, EnemyAttack(enemy, ability, believedPosition, target)));
+                budget -= ability.ActionCost * Half;
+                mpLeft -= ability.MpCost;
+                if (ability.CooldownTurns > 0) usedCooldowns.Add(ability);
+
+                if (support)
+                {
+                    // Same heal/buff again only if it can be repeated (no cooldown, MP left).
+                    bool again = ability.CooldownTurns <= 0 && (ability.MpCost <= 0 || mpLeft >= ability.MpCost);
+                    if (!again) ability = null;
+                }
+                else
+                {
+                    ability = GetEnemyOffenseAbility(enemy, usedCooldowns, mpLeft);
+                }
+            }
+
+            enemy.Actions.Spend(enemy.Actions.Remaining - budget);
             EndTurn();
+        }
+
+        // Plans one walk for `enemy` (queued in the swarm, played out with
+        // everyone else's) of at most `budget` half-steps and returns what it
+        // costs. Prefers the cheapest tile the target is in range from, ideally
+        // leaving `reserve` half-steps for the attack; otherwise walks as
+        // close as the budget allows (by real path distance, so dead-end
+        // corners still rank correctly). 0 means it stays put.
+        private int PlanEnemyMove(CombatUnit enemy, GridPosition target, int range, int budget, int reserve)
+        {
+            if (budget < GridSteps.StraightCost) return 0;
+
+            var blocked = new HashSet<GridPosition>(OccupiedTilesExcluding(enemy));
+            var costs = GridSteps.CostMap(enemy.Position, _movementMap, blocked, budget);
+            costs.Remove(enemy.Position);
+            if (costs.Count == 0) return 0;
+
+            var field = PathDistanceField.BuildFrom(target, _movementMap);
+
+            bool Fires(GridPosition pos) => pos.IsWithinRange(target, range)
+                && LineOfSight.HasClearPath(pos, target, _sightMap);
+
+            GridPosition? dest = costs
+                .Where(kv => Fires(kv.Key) && kv.Value <= budget - reserve)
+                .OrderBy(kv => kv.Value).ThenBy(kv => PathDistanceOrMax(field, kv.Key))
+                .Select(kv => (GridPosition?)kv.Key).FirstOrDefault();
+
+            if (dest == null)
+                dest = costs
+                    .Where(kv => Fires(kv.Key))
+                    .OrderBy(kv => kv.Value)
+                    .Select(kv => (GridPosition?)kv.Key).FirstOrDefault();
+
+            if (dest == null)
+                dest = costs
+                    .OrderBy(kv => PathDistanceOrMax(field, kv.Key)).ThenBy(kv => kv.Value)
+                    .Select(kv => (GridPosition?)kv.Key).FirstOrDefault();
+
+            if (dest == null) return 0;
+
+            var path = PathFinder.FindPath(enemy.Position, dest.Value, _movementMap, blocked);
+            int cost = 0;
+            var prev = enemy.Position;
+            int keep = 0;
+            foreach (var tile in path)
+            {
+                int step = GridSteps.StepCost(prev, tile);
+                if (cost + step > budget) break;
+                cost += step;
+                prev = tile;
+                keep++;
+            }
+            if (keep == 0) return 0;
+            if (keep < path.Count) path.RemoveRange(keep, path.Count - keep);
+
+            _swarmMoves.Add(new SwarmMove { Unit = enemy, Path = path });
+            _swarmReserved[enemy] = path[path.Count - 1];
+            return cost;
+        }
+
+        // One queued enemy attack, re-checked when its turn in the swarm
+        // comes: the enemy may have been stopped short, the target may
+        // already be dead, or a heal may no longer be needed. Skipped
+        // attacks simply don't happen.
+        private IEnumerator EnemyAttack(CombatUnit enemy, IAbility ability, GridPosition tile, CombatUnit target)
+        {
+            if (!enemy.IsAlive) yield break;
+            if (enemy.IsOnCooldown(ability) || !enemy.CanAfford(ability)) yield break;
+
+            if (AbilityTargeting.TargetsAllies(ability))
+            {
+                if (target != null)
+                {
+                    if (!target.IsAlive || !SupportNeed.Needs(target, ability, enemy.SupportHealThreshold)) yield break;
+                    tile = target.Position;   // allies move during the swarm; aim at where they are now
+                }
+            }
+            else if (target != null && !target.IsAlive) yield break;
+
+            if (!enemy.Position.IsWithinRange(tile, ability.Range)
+                || !LineOfSight.HasClearPath(enemy.Position, tile, _sightMap))
+                yield break;
+
+            yield return StartCoroutine(PerformAbility(enemy, ability, tile));
         }
 
         // The first weapon ability (in order) that's usable, targets allies,
@@ -2849,12 +2960,14 @@ namespace DungeonTower.UI
         // — a Heal-kind ability sitting in slot 0 no longer blocks a Damage
         // ability in slot 1 from ever being tried; support already had its own
         // pass in TryPickSupportAction.
-        private IAbility GetEnemyOffenseAbility(CombatUnit enemy)
+        private IAbility GetEnemyOffenseAbility(CombatUnit enemy, HashSet<IAbility> plannedCooldowns = null, int? mpAvailable = null)
         {
+            int mp = mpAvailable ?? enemy.CurrentMp;
             foreach (var candidate in enemy.WeaponAbilities)
                 if (!enemy.IsOnCooldown(candidate)
+                    && (plannedCooldowns == null || !plannedCooldowns.Contains(candidate))
                     && !SilenceRules.IsBlocked(enemy, candidate, AbilitySource.Weapon)
-                    && enemy.CanAfford(candidate)
+                    && (candidate.MpCost <= 0 || mp >= candidate.MpCost)
                     && !AbilityTargeting.TargetsAllies(candidate))
                     return candidate;
 

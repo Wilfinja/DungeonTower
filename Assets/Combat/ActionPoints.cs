@@ -15,7 +15,8 @@ namespace DungeonTower.Combat
     /// actions next phase; three unspent actions still only bank one, so a
     /// hero can have at most 4 (more with Haste).
     ///
-    /// Only heroes use this. Enemies still get one move-and-act per phase.
+    /// Enemies use it too (no banking, since they never call EndPhase), with
+    /// BaseActionsPerPhase set from their EnemySO.
     /// </summary>
     public sealed class ActionPoints
     {
@@ -24,6 +25,9 @@ namespace DungeonTower.Combat
         public const int MaxBankedHalf = HalfPerAction;      // 1 action
 
         private int _carry;   // banked at the end of the last phase
+
+        /// <summary>Actions this unit gets each phase before banking and Haste/Slow. Heroes use the default (3); enemies take theirs from EnemySO.</summary>
+        public int BaseActionsPerPhase { get; set; } = BaseActions;
 
         /// <summary>Half-steps left this phase.</summary>
         public int Remaining { get; private set; }
@@ -45,7 +49,7 @@ namespace DungeonTower.Combat
         public void BeginPhase(int bonusActions = 0)
         {
             Banked = _carry;
-            int pool = Math.Max(HalfPerAction, (BaseActions + bonusActions) * HalfPerAction);
+            int pool = Math.Max(HalfPerAction, (BaseActionsPerPhase + bonusActions) * HalfPerAction);
             Remaining = pool + _carry;
             _carry = 0;
             IsDone = false;
