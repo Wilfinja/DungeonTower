@@ -8,9 +8,10 @@ namespace DungeonTower.Generation
     /// query it directly without this assembly depending on Combat, or
     /// Combat depending on this assembly.
     ///
-    /// Doors are walkable but see-through only once open. A door opens
-    /// the first time anything steps onto it and then stays open for the
-    /// rest of the floor.
+    /// A closed door blocks sight, and blocks movement too once Combat's
+    /// MovementMapView wraps this map (IsWalkable here stays true so level
+    /// generation can still treat doorways as connected). Doors are opened
+    /// and closed from an adjacent tile (see BattleController).
     /// </summary>
     public sealed class DungeonMap : IWalkableMap, ISightBlockingMap
     {
@@ -53,6 +54,10 @@ namespace DungeonTower.Generation
         /// <summary>Opens the door at this position. True only if a closed door was just opened.</summary>
         public bool TryOpenDoor(GridPosition position)
             => IsDoor(position) && _openDoors.Add(position);
+
+        /// <summary>Closes the door at this position. True only if an open door was just closed.</summary>
+        public bool TryCloseDoor(GridPosition position)
+            => IsDoor(position) && _openDoors.Remove(position);
 
         public bool BlocksSight(GridPosition position)
         {

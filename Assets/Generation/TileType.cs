@@ -6,7 +6,7 @@ namespace DungeonTower.Generation
     {
         Floor,
         Wall,
-        Door,   // walkable; blocks sight until something steps onto it
+        Door,   // closed: blocks sight and movement; open: walkable and see-through
         Exit    // stairs down to the next floor
     }
 }

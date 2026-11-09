@@ -148,6 +148,7 @@ namespace DungeonTower.UI
         private DungeonMap _map;
         private BattlefieldObjectRegistry _battlefieldObjects;
         private IWalkableMap _movementMap;
+        private IWalkableMap _doorPassMap;   // movement as if every closed door were open (enemy route planning)
         private IWalkableMap _sightMap;
         private int _lastTickedRound = -1;
         private int _heroPhaseRound = -1;   // the round whose hero phase has been set up
@@ -306,6 +307,7 @@ namespace DungeonTower.UI
             _map = dungeon.Map;
             _battlefieldObjects = new BattlefieldObjectRegistry();
             _movementMap = new MovementMapView(_map, _battlefieldObjects);
+            _doorPassMap = new MovementMapView(_map, _battlefieldObjects, false);
             _sightMap = new SightMapView(_map, _battlefieldObjects);
             Debug.Log($"Floor {_currentFloor}: generated {dungeon.Rooms.Count} room(s)");
             _gridView.BuildFrom(_map);
@@ -1184,15 +1186,7 @@ namespace DungeonTower.UI
                     if (!leader.IsAlive) yield break;
 
                     // 4) Does anybody notice us?
-                    foreach (var enemy in _unitViews.Keys.Where(u => u.IsAlive && u.Faction == Faction.Enemy && !u.IsAlerted).ToList())
-                    {
-                        var nearest = FindNearestPlayer(enemy);
-                        if (nearest == null || !enemy.CanSense(nearest.Position, _sightMap)) continue;
-                        AlertUnit(enemy);
-                        Debug.Log($"{enemy.DisplayName} spots {nearest.DisplayName}!");
-                        RecordSighting(enemy, nearest);
-                    }
-                    if (IsInCombat()) break;
+                    if (AlertNoticingEnemies()) break;
 
                     // 5) Stop when something new shows up.
                     bool newSighting = false;
@@ -1202,6 +1196,21 @@ namespace DungeonTower.UI
                 }
             }
             finally { _movesInProgress--; }
+        }
+
+        // Idle enemies that can see a hero notice them (and the pack wakes up).
+        // True once a fight is on.
+        private bool AlertNoticingEnemies()
+        {
+            foreach (var enemy in _unitViews.Keys.Where(u => u.IsAlive && u.Faction == Faction.Enemy && !u.IsAlerted).ToList())
+            {
+                var nearest = FindNearestPlayer(enemy);
+                if (nearest == null || !enemy.CanSense(nearest.Position, _sightMap)) continue;
+                AlertUnit(enemy);
+                Debug.Log($"{enemy.DisplayName} spots {nearest.DisplayName}!");
+                RecordSighting(enemy, nearest);
+            }
+            return IsInCombat();
         }
 
         // Where everyone alive stands (or is about to stand), except `exclude`.
@@ -1828,6 +1837,23 @@ namespace DungeonTower.UI
                 return;
             }
 
+            // Doors: click a closed one beside you to open it (Shift+click an open one to close it).
+            // Clicking a closed door from afar walks you to the tile in front of it.
+            if (_map.IsDoor(target))
+            {
+                bool open = _map.IsDoorOpen(target);
+                bool shift = Keyboard.current != null && Keyboard.current.shiftKey.isPressed;
+                bool beside = IsOrthogonallyAdjacent(acting.Position, target);
+                if (!open && beside) { ToggleDoor(acting, target, true); return; }
+                if (open && shift && beside) { ToggleDoor(acting, target, false); return; }
+                if (!open)
+                {
+                    var stand = NearestReachableNeighbor(acting, target);
+                    if (!stand.HasValue) { ClearPathPreview(); return; }
+                    target = stand.Value;   // carry on as an ordinary move click
+                }
+            }
+
             var occupant = FindLivingUnitAt(target);
             if (occupant != null && occupant != acting && occupant.Faction == Faction.Player)
             {
@@ -1850,6 +1876,54 @@ namespace DungeonTower.UI
             }
 
             ShowPathPreview(acting, target);   // first click (or a new tile): preview
+        }
+
+        private static bool IsOrthogonallyAdjacent(GridPosition a, GridPosition b)
+            => System.Math.Abs(a.X - b.X) + System.Math.Abs(a.Y - b.Y) == 1;
+
+        // The reachable tile directly in front of a door that is closest to `unit`.
+        private GridPosition? NearestReachableNeighbor(CombatUnit unit, GridPosition door)
+        {
+            var offsets = new[] { new GridPosition(1, 0), new GridPosition(-1, 0), new GridPosition(0, 1), new GridPosition(0, -1) };
+            return offsets
+                .Select(o => new GridPosition(door.X + o.X, door.Y + o.Y))
+                .Where(t => _reachableTiles.Contains(t) && FindLivingUnitAt(t) == null)
+                .OrderBy(t => t.ManhattanDistance(unit.Position))
+                .Select(t => (GridPosition?)t)
+                .FirstOrDefault();
+        }
+
+        // A hero opens or closes the door beside them. Free while exploring,
+        // 1 action in combat. A door can only be closed with nobody in the doorway.
+        private void ToggleDoor(CombatUnit hero, GridPosition door, bool open)
+        {
+            if (!open && FindLivingUnitAt(door) != null)
+            {
+                Debug.Log("Something is standing in the doorway.");
+                return;
+            }
+            if (!CanPayInCombat(1)) return;
+
+            if (open ? !_map.TryOpenDoor(door) : !_map.TryCloseDoor(door)) return;
+            PayInCombat(1);
+            _gridView.SetDoorOpen(door, open);
+            Debug.Log($"{hero.DisplayName} {(open ? "opens" : "closes")} the door.");
+
+            ClearPathPreview();
+            RefreshFogOfWar();                       // the far side lights up (or goes dark)
+            if (!IsInCombat()) AlertNoticingEnemies();   // someone on the other side may have seen us
+            AfterHeroAction();
+        }
+
+        // An enemy's queued "open the door in front of me", played out after the moves.
+        private IEnumerator EnemyOpenDoor(CombatUnit enemy, GridPosition door)
+        {
+            if (!enemy.IsAlive || !IsOrthogonallyAdjacent(enemy.Position, door)) yield break;
+            if (!_map.TryOpenDoor(door)) yield break;
+            _gridView.SetDoorOpen(door, true);
+            Debug.Log($"{enemy.DisplayName} opens a door.");
+            RefreshFogOfWar();
+            yield return new WaitForSeconds(0.2f);
         }
 
         private void ShowPathPreview(CombatUnit unit, GridPosition target)
@@ -2150,11 +2224,11 @@ namespace DungeonTower.UI
             if (budget < GridSteps.StraightCost) return 0;
 
             var blocked = new HashSet<GridPosition>(OccupiedTilesExcluding(enemy));
-            var costs = GridSteps.CostMap(enemy.Position, _movementMap, blocked, budget);
+            var costs = GridSteps.CostMap(enemy.Position, _doorPassMap, blocked, budget);
             costs.Remove(enemy.Position);
             if (costs.Count == 0) return 0;
 
-            var field = PathDistanceField.BuildFrom(target, _movementMap);
+            var field = PathDistanceField.BuildFrom(target, _doorPassMap);
 
             bool Fires(GridPosition pos) => pos.IsWithinRange(target, range)
                 && LineOfSight.HasClearPath(pos, target, _sightMap);
@@ -2177,23 +2251,40 @@ namespace DungeonTower.UI
 
             if (dest == null) return 0;
 
-            var path = PathFinder.FindPath(enemy.Position, dest.Value, _movementMap, blocked);
+            var path = PathFinder.FindPath(enemy.Position, dest.Value, _doorPassMap, blocked);
             int cost = 0;
             var prev = enemy.Position;
             int keep = 0;
+            GridPosition? closedDoor = null;
             foreach (var tile in path)
             {
+                // Routes are planned as if doors were open; the walk stops in
+                // front of the first closed one.
+                if (_map.IsDoor(tile) && !_map.IsDoorOpen(tile)) { closedDoor = tile; break; }
+
                 int step = GridSteps.StepCost(prev, tile);
                 if (cost + step > budget) break;
                 cost += step;
                 prev = tile;
                 keep++;
             }
-            if (keep == 0) return 0;
+
+            // Standing at the door with an action to spare: open it (1 action).
+            bool opensDoor = closedDoor.HasValue
+                && budget - cost >= ActionPoints.HalfPerAction
+                && IsOrthogonallyAdjacent(prev, closedDoor.Value);
+
+            if (keep == 0 && !opensDoor) return 0;
             if (keep < path.Count) path.RemoveRange(keep, path.Count - keep);
 
-            _swarmMoves.Add(new SwarmMove { Unit = enemy, Path = path });
-            _swarmReserved[enemy] = path[path.Count - 1];
+            if (keep > 0) _swarmMoves.Add(new SwarmMove { Unit = enemy, Path = path });
+            _swarmReserved[enemy] = keep > 0 ? path[path.Count - 1] : enemy.Position;
+
+            if (opensDoor)
+            {
+                _swarmAttacks.Add((enemy, EnemyOpenDoor(enemy, closedDoor.Value)));
+                cost += ActionPoints.HalfPerAction;
+            }
             return cost;
         }
 
