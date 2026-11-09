@@ -24,6 +24,40 @@ namespace DungeonTower.Items
     }
 
     /// <summary>
+    /// One possible chest item for a theme: exactly one of Weapon / Armor /
+    /// Potion / Scroll, how likely it is relative to the other entries, and
+    /// the floors it can appear on. MinFloor/MaxFloor are inclusive (0 = no
+    /// limit), so a theme can keep its best gear for its deeper floors.
+    /// Count only applies to potions and scrolls.
+    /// </summary>
+    [Serializable]
+    public struct ThemeLootEntry
+    {
+        public WeaponSO Weapon;
+        public ArmorSO Armor;
+        public PotionSO Potion;
+        public ScrollSO Scroll;
+        [Min(0.01f)] public float Weight;
+        [Min(0)] public int MinFloor;
+        [Min(0)] public int MaxFloor;
+        [Min(1)] public int MinCount;
+        [Min(1)] public int MaxCount;
+
+        public bool IsValid
+        {
+            get
+            {
+                int items = (Weapon != null ? 1 : 0) + (Armor != null ? 1 : 0)
+                    + (Potion != null ? 1 : 0) + (Scroll != null ? 1 : 0);
+                return items == 1 && Weight > 0f;
+            }
+        }
+
+        public bool AppliesToFloor(int floor)
+            => (MinFloor <= 0 || floor >= MinFloor) && (MaxFloor <= 0 || floor <= MaxFloor);
+    }
+
+    /// <summary>
     /// One dungeon theme's enemy pool — which floors it applies to,
     /// which EnemySOs can appear (each with a relative spawn weight
     /// within this theme — the same EnemySO can be reused across themes
@@ -44,12 +78,30 @@ namespace DungeonTower.Items
         [SerializeField] private List<RoleWeightEntry> _roleWeights = new List<RoleWeightEntry>();
         [SerializeField, Min(0)] private int _maxBossesPerFloor = 1;
 
+        [Header("Chests")]
+        [Tooltip("How many chests appear on each floor of this theme (a random number from Min to Max). 0 and 0 = no chests.")]
+        [SerializeField, Min(0)] private int _minChestsPerFloor = 1;
+        [SerializeField, Min(0)] private int _maxChestsPerFloor = 3;
+        [Tooltip("How many times each chest rolls the loot table below (random from Min to Max).")]
+        [SerializeField, Min(1)] private int _minRollsPerChest = 1;
+        [SerializeField, Min(1)] private int _maxRollsPerChest = 2;
+        [Tooltip("Every this-many floors into the theme, chests get one more roll. 0 = never. This is how loot keeps up with depth inside a theme.")]
+        [SerializeField, Min(0)] private int _floorsPerExtraRoll = 0;
+        [Tooltip("What chests in this theme can hold. Give each entry a Floor range to unlock better items deeper in.")]
+        [SerializeField] private List<ThemeLootEntry> _chestLoot = new List<ThemeLootEntry>();
+
         public string DisplayName => _displayName;
         public int MinFloor => _minFloor;
         public int MaxFloor => _maxFloor;
         public IReadOnlyList<ThemeEnemyEntry> Enemies => _enemies;
         public IReadOnlyList<RoleWeightEntry> RoleWeights => _roleWeights;
         public int MaxBossesPerFloor => _maxBossesPerFloor;
+        public int MinChestsPerFloor => _minChestsPerFloor;
+        public int MaxChestsPerFloor => Mathf.Max(_minChestsPerFloor, _maxChestsPerFloor);
+        public int MinRollsPerChest => _minRollsPerChest;
+        public int MaxRollsPerChest => Mathf.Max(_minRollsPerChest, _maxRollsPerChest);
+        public int FloorsPerExtraRoll => _floorsPerExtraRoll;
+        public IReadOnlyList<ThemeLootEntry> ChestLoot => _chestLoot;
 
         public bool CoversFloor(int floor) => floor >= _minFloor && floor <= _maxFloor;
     }

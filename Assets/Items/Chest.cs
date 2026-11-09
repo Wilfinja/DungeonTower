@@ -32,6 +32,31 @@ namespace DungeonTower.Items
 
         public GridPosition Position => new GridPosition(_gridX, _gridY);
 
+        // Runtime setup for chests the game places itself (see ChestLootRoller).
+        public void Place(GridPosition position)
+        {
+            _gridX = position.X;
+            _gridY = position.Y;
+        }
+
+        public void AddWeapon(WeaponSO weapon) { if (weapon != null) _weapons.Add(weapon); }
+
+        public void AddArmor(ArmorSO armor) { if (armor != null) _armor.Add(armor); }
+
+        public void AddPotion(PotionSO potion, int count = 1)
+        {
+            if (potion == null) return;
+            for (int i = 0; i < count; i++) _potions.Add(potion);
+            RebuildCounts();
+        }
+
+        public void AddScroll(ScrollSO scroll, int count = 1)
+        {
+            if (scroll == null) return;
+            for (int i = 0; i < count; i++) _scrolls.Add(scroll);
+            RebuildCounts();
+        }
+
         // On it or adjacent — a chest is a fixed piece of furniture, not
         // something you have to stand exactly on top of.
         public int InteractionRadius => 1;
