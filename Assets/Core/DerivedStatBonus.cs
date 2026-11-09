@@ -4,7 +4,7 @@ namespace DungeonTower.Core
 {
     /// <summary>
     /// A flat bonus to one or more derived (secondary) stats — HP, MP,
-    /// Physical/Magic Attack and Defense, Initiative, Move Range, Status
+    /// Physical/Magic Attack and Defense, Move Range, Status
     /// Resist, Crit, Support Power, Potency, Healing Received, MP Regen.
     /// This is what armor and weapons grant. Unlike StatGrowth (which
     /// feeds Body/Mind/Spirit), this never touches the primary stats —
@@ -26,7 +26,6 @@ namespace DungeonTower.Core
         public float PhysicalDefense;
         public float MagicAttack;
         public float MagicDefense;
-        public int Initiative;
         public int MoveRange;
         public float StatusResist;
         public float CritChance;
@@ -39,7 +38,7 @@ namespace DungeonTower.Core
             int hp = 0, int mp = 0,
             float physicalAttack = 0, float physicalDefense = 0,
             float magicAttack = 0, float magicDefense = 0,
-            int initiative = 0, int moveRange = 0,
+            int moveRange = 0,
             float statusResist = 0, float critChance = 0,
             float supportPower = 0, float potency = 0,
             float healingReceived = 0, float mpRegen = 0)
@@ -50,7 +49,6 @@ namespace DungeonTower.Core
             PhysicalDefense = physicalDefense;
             MagicAttack = magicAttack;
             MagicDefense = magicDefense;
-            Initiative = initiative;
             MoveRange = moveRange;
             StatusResist = statusResist;
             CritChance = critChance;
@@ -64,7 +62,7 @@ namespace DungeonTower.Core
             hp: a.Hp + b.Hp, mp: a.Mp + b.Mp,
             physicalAttack: a.PhysicalAttack + b.PhysicalAttack, physicalDefense: a.PhysicalDefense + b.PhysicalDefense,
             magicAttack: a.MagicAttack + b.MagicAttack, magicDefense: a.MagicDefense + b.MagicDefense,
-            initiative: a.Initiative + b.Initiative, moveRange: a.MoveRange + b.MoveRange,
+            moveRange: a.MoveRange + b.MoveRange,
             statusResist: a.StatusResist + b.StatusResist, critChance: a.CritChance + b.CritChance,
             supportPower: a.SupportPower + b.SupportPower, potency: a.Potency + b.Potency,
             healingReceived: a.HealingReceived + b.HealingReceived, mpRegen: a.MpRegen + b.MpRegen);

@@ -27,6 +27,10 @@ namespace DungeonTower.Combat
 
         public static int Budget(int moveRange) => moveRange * StraightCost;
 
+        // Cost, in half-steps, of ONE step between two adjacent tiles.
+        public static int StepCost(GridPosition from, GridPosition to)
+            => from.X != to.X && from.Y != to.Y ? DiagonalCost : StraightCost;
+
         private static readonly (int dx, int dy)[] Straights = { (1, 0), (-1, 0), (0, 1), (0, -1) };
         private static readonly (int dx, int dy)[] Diagonals = { (1, 1), (1, -1), (-1, 1), (-1, -1) };
 

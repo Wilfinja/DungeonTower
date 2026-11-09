@@ -57,7 +57,6 @@ namespace DungeonTower.Core
         public float PhysicalDefense => Math.Max(0f, DerivedStatFormulas.PhysicalDefense(Current) + TotalBonus.PhysicalDefense);
         public float MagicAttack => Math.Max(0f, DerivedStatFormulas.MagicAttack(Current) + TotalBonus.MagicAttack);
         public float MagicDefense => Math.Max(0f, DerivedStatFormulas.MagicDefense(Current) + TotalBonus.MagicDefense);
-        public int Initiative => Math.Max(0, DerivedStatFormulas.Initiative(Current) + TotalBonus.Initiative);
         public int MoveRange => Math.Max(0, DerivedStatFormulas.MoveRange(Current) + TotalBonus.MoveRange);
         public float StatusResist => Math.Max(0f, Math.Min(DerivedStatFormulas.StatusResistCapWithGear,
             DerivedStatFormulas.StatusResist(Current) + TotalBonus.StatusResist));

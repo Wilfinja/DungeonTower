@@ -169,7 +169,6 @@ namespace DungeonTower.UI
             AddBonus(lines, b.PhysicalDefense, "Physical Defense");
             AddBonus(lines, b.MagicAttack, "Magic Attack");
             AddBonus(lines, b.MagicDefense, "Magic Defense");
-            AddBonus(lines, b.Initiative, "Initiative");
             AddBonus(lines, b.MoveRange, "Move Range");
             AddBonus(lines, b.StatusResist, "Status Resist", "%");
             AddBonus(lines, b.CritChance, "Crit Chance", "%");
@@ -232,7 +231,7 @@ namespace DungeonTower.UI
         // "Range 3 · Enemies · Single target · Cooldown 2 turns"
         private static void AppendTargeting(StringBuilder sb, IAbility ability, UnitStats viewer)
         {
-            var parts = new List<string> { $"Range {ability.Range}" };
+            var parts = new List<string> { $"Range {ability.Range}", $"{ability.ActionCost} action{(ability.ActionCost == 1 ? "" : "s")}" };
 
             // Red when the viewer's MAX MP is below the cost — they could never cast it.
             if (ability.MpCost > 0)

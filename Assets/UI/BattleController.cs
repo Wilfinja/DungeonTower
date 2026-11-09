@@ -61,6 +61,12 @@ namespace DungeonTower.UI
         [SerializeField] private RectTransform _healthBarContainer;
         [SerializeField] private List<Chest> _chests = new List<Chest>();
 
+        [Header("Phase UI (optional)")]
+        [Tooltip("Shows e.g. 'Round 3 - Hero phase' / 'Enemy phase'.")]
+        [SerializeField] private TMPro.TextMeshProUGUI _phaseLabel;
+        [Tooltip("Shows the acting hero's actions left, e.g. 'Warrior: 2.5 actions (+1 banked)'.")]
+        [SerializeField] private TMPro.TextMeshProUGUI _actionsLabel;
+
         // One hero's starting setup: name, where their creation points
         // go, gear, and belt. Direct asset references, same reasoning as
         // EnemySO — no ID to keep in sync, just drag the asset in.
@@ -144,6 +150,11 @@ namespace DungeonTower.UI
         private IWalkableMap _movementMap;
         private IWalkableMap _sightMap;
         private int _lastTickedRound = -1;
+        private int _heroPhaseRound = -1;   // the round whose hero phase has been set up
+
+        // In combat, swapping gear, using a potion and looting each cost an action.
+        private const int EquipCostActions = 1;
+        private const int LootCostActions = 1;
         private readonly Dictionary<BattlefieldObject, List<GameObject>> _battlefieldViews = new Dictionary<BattlefieldObject, List<GameObject>>();
         private readonly FogOfWar _fog = new FogOfWar();
         private Battle _battle;
@@ -317,6 +328,8 @@ namespace DungeonTower.UI
             foreach (var unit in units)
                 SpawnUnitView(unit);
 
+            _heroPhaseRound = -1;
+            _lastTickedRound = -1;
             _battle = new Battle(units) { EndOnEnemiesDefeated = false };
             _battle.Start();
             RefreshFogOfWar();
@@ -631,16 +644,31 @@ namespace DungeonTower.UI
                 if (_lootWindow != null) _lootWindow.Hide();
                 if (_lootToggleButton != null) _lootToggleButton.SetActive(false);
                 if (_turnTracker != null) _turnTracker.Hide();
+                UpdatePhaseLabels();
                 return;
             }
 
-            var unit = _battle.CurrentUnit;
-            Debug.Log($"Round {_battle.RoundNumber} — {unit.DisplayName}'s turn ({unit.Faction})");
             if (_battle.RoundNumber != _lastTickedRound)
             {
                 _lastTickedRound = _battle.RoundNumber;
                 TickBattlefieldObjects();
             }
+
+            // Heroes: one set-up for the whole phase, then the player picks who acts.
+            if (_battle.Phase == TurnPhase.Hero)
+            {
+                if (_heroPhaseRound != _battle.RoundNumber)
+                {
+                    _heroPhaseRound = _battle.RoundNumber;
+                    if (!StartHeroPhase()) return;
+                }
+                PresentHero(_battle.CurrentUnit);
+                return;
+            }
+
+            // Enemies: one at a time (their moves and attacks are then played out together).
+            var unit = _battle.CurrentUnit;
+            Debug.Log($"Round {_battle.RoundNumber} — {unit.DisplayName}'s turn ({unit.Faction})");
             unit.TickCooldowns();
             if (IsInCombat())
             {
@@ -663,36 +691,274 @@ namespace DungeonTower.UI
                 return;
             }
             RefreshTurnHighlight();
-            if (_turnTracker != null)
-                _turnTracker.Refresh(_battle.GetProjectedTurnOrder(IsTrackable, TurnTrackerMinEntries),
-                    _battle.CurrentUnit, IsInCombat());
+            RefreshTurnTracker();
             RefreshDangerZoneMarkers();
             _gridView.ClearHighlights();
             _pendingScroll = null;
             _inventoryPanel.Hide();
             if (_lootWindow != null) _lootWindow.Hide();
 
-            if (unit.Faction == Faction.Player)
-            {
-                _inventoryToggleButton.SetActive(true);
-                _inventoryPanel.SetTargetMode(IsInCombat(), _partyMembers.IndexOf(unit), unit.Belt);
-                RefreshLootAvailability(unit);
-                RefreshDescendAvailability();
+            _inventoryToggleButton.SetActive(false);
+            if (_lootToggleButton != null) _lootToggleButton.SetActive(false);
+            if (_descendButton != null) _descendButton.SetActive(false);
+            _abilityBar.Hide();
+            UpdatePhaseLabels();
+            RunEnemyTurn(unit);
+        }
 
-                if (unit.WeaponAbilities.Count > 0) _abilityBar.Show(unit.WeaponAbilities, unit.GetRemainingCooldown,
-    a => SilenceRules.IsBlocked(unit, a, AbilitySource.Weapon) || !unit.CanAfford(a));
-                else _abilityBar.ShowMoveOnly();
+        private void RefreshTurnTracker()
+        {
+            if (_turnTracker != null)
+                _turnTracker.Refresh(_battle.GetProjectedTurnOrder(IsTrackable, TurnTrackerMinEntries),
+                    _battle.CurrentUnit, IsInCombat());
+        }
 
-                SetMode(ActionMode.Move);
-            }
-            else
+        // ---- Hero phase ---------------------------------------------------
+        // Heroes act in any order, as many actions as they can afford. Each
+        // action (a move, an ability, a gear swap...) spends from the hero's
+        // pool; when the selected hero runs dry the next hero with actions is
+        // picked, and when nobody can act the phase ends and the enemies go.
+
+        // Start-of-phase upkeep for every living hero (cooldowns, MP regen,
+        // start-of-turn status effects), then a fresh pool of actions each.
+        // Returns false if the fight ended or the phase passed on its own.
+        private bool StartHeroPhase()
+        {
+            Debug.Log($"Round {_battle.RoundNumber} — Hero phase");
+
+            foreach (var hero in _partyMembers.Where(h => h.IsAlive).ToList())
             {
-                _inventoryToggleButton.SetActive(false);
-                if (_lootToggleButton != null) _lootToggleButton.SetActive(false);
-                if (_descendButton != null) _descendButton.SetActive(false);
-                _abilityBar.Hide();
-                RunEnemyTurn(unit);
+                hero.TickCooldowns();
+                if (IsInCombat())
+                {
+                    int regenMp = hero.RegenMp();
+                    if (regenMp > 0) Debug.Log($"{hero.DisplayName} recovers {regenMp} MP.");
+                }
+
+                var startTick = hero.Status.OnTurnStart();
+                foreach (var line in startTick.Log) Debug.Log(line);
+                _unitViews[hero].Refresh();
+                if (startTick.OwnerDied)
+                {
+                    HandleDeath(hero);
+                    continue;
+                }
+
+                hero.BeginActionPhase();
+                if (startTick.SkipTurn)
+                {
+                    Debug.Log($"{hero.DisplayName} is stunned and skips their turn.");
+                    hero.Actions.Spend(hero.Actions.Remaining);   // a skipped turn banks nothing
+                    hero.Actions.MarkDone();
+                }
             }
+
+            _battle.ReevaluateOutcome();
+            if (_battle.Outcome != BattleOutcome.InProgress)
+            {
+                BeginTurn();   // shows the outcome
+                return false;
+            }
+
+            var first = _partyMembers.FirstOrDefault(h => h.IsAlive && h.Actions.CanAct);
+            if (first == null)
+            {
+                EndHeroPhaseNow();   // everyone is stunned or down
+                return false;
+            }
+
+            _battle.TrySelectHero(first);
+            return true;
+        }
+
+        // Sets up the UI for the acting hero. Safe to call repeatedly
+        // (after each action, or when the player switches heroes).
+        private void PresentHero(CombatUnit unit)
+        {
+            RefreshTurnHighlight();
+            RefreshTurnTracker();
+            RefreshDangerZoneMarkers();
+            _gridView.ClearHighlights();
+            _pendingScroll = null;
+            _inventoryPanel.Hide();
+            if (_lootWindow != null) _lootWindow.Hide();
+
+            _inventoryToggleButton.SetActive(true);
+            _inventoryPanel.SetTargetMode(IsInCombat(), _partyMembers.IndexOf(unit), unit.Belt);
+            RefreshLootAvailability(unit);
+            RefreshDescendAvailability();
+
+            ShowAbilityBar(unit);
+            SetMode(ActionMode.Move);
+            UpdatePhaseLabels();
+        }
+
+        private void ShowAbilityBar(CombatUnit unit)
+        {
+            if (unit.WeaponAbilities.Count > 0)
+                _abilityBar.Show(unit.WeaponAbilities, unit.GetRemainingCooldown, a => AbilityBlocked(unit, a));
+            else _abilityBar.ShowMoveOnly();
+        }
+
+        // Greyed out on the ability bar: silenced, not enough MP, or not enough actions left.
+        private static bool AbilityBlocked(CombatUnit unit, IAbility ability)
+            => SilenceRules.IsBlocked(unit, ability, AbilitySource.Weapon)
+               || !unit.CanAfford(ability)
+               || !unit.Actions.CanSpendActions(ability.ActionCost);
+
+        // Switch which hero is acting (clicking a hero, Tab). Heroes with no
+        // actions left can't be picked.
+        private void SelectHero(CombatUnit hero)
+        {
+            if (_endTurnPending || AnyUnitMoving() || _movesInProgress > 0) return;
+            if (_battle == null || _battle.Phase != TurnPhase.Hero || _battle.Outcome != BattleOutcome.InProgress) return;
+            if (hero == null || hero == _battle.CurrentUnit || !hero.IsAlive || !hero.Actions.CanAct) return;
+            if (!_battle.TrySelectHero(hero)) return;
+
+            ClearPathPreview();
+            PresentHero(hero);
+        }
+
+        private void SelectNextHero()
+        {
+            var current = _battle.CurrentUnit;
+            int start = _partyMembers.IndexOf(current);
+            for (int i = 1; i <= _partyMembers.Count; i++)
+            {
+                var candidate = _partyMembers[(start + i) % _partyMembers.Count];
+                if (candidate != current && candidate.IsAlive && candidate.Actions.CanAct)
+                {
+                    SelectHero(candidate);
+                    return;
+                }
+            }
+        }
+
+        // Called after a hero's action has been started (a walk, an attack,
+        // a gear swap). Waits for any movement/animation to finish, then
+        // works out what happens next.
+        private void AfterHeroAction()
+        {
+            ClearPathPreview();
+            if (_endTurnPending) return;
+            if (_movesInProgress > 0) { StartCoroutine(AfterHeroActionWhenIdle()); return; }
+            ResolveHeroAction();
+        }
+
+        private IEnumerator AfterHeroActionWhenIdle()
+        {
+            _endTurnPending = true;
+            while (_movesInProgress > 0) yield return null;
+            _endTurnPending = false;
+            ResolveHeroAction();
+        }
+
+        private void ResolveHeroAction()
+        {
+            _battle.ReevaluateOutcome();
+            if (_battle.Outcome != BattleOutcome.InProgress)
+            {
+                BeginTurn();   // shows the outcome
+                return;
+            }
+
+            var hero = _battle.CurrentUnit;
+            if (hero == null || !hero.IsAlive || !hero.Actions.CanAct)
+            {
+                AdvanceHero();
+                return;
+            }
+
+            PresentHero(hero);   // same hero, fewer actions
+        }
+
+        // The selected hero is finished: next hero with actions left, else the phase ends.
+        private void AdvanceHero()
+        {
+            var current = _battle.CurrentUnit;
+            int start = current != null ? _partyMembers.IndexOf(current) : -1;
+            for (int i = 1; i <= _partyMembers.Count; i++)
+            {
+                var candidate = _partyMembers[(start + i + _partyMembers.Count) % _partyMembers.Count];
+                if (candidate.IsAlive && candidate.Actions.CanAct && _battle.TrySelectHero(candidate))
+                {
+                    PresentHero(candidate);
+                    return;
+                }
+            }
+
+            EndHeroPhaseNow();
+        }
+
+        // Hooked to an optional "End Phase" button's OnClick: every hero is
+        // done, whatever they have left (up to 1 action is banked).
+        public void OnEndPhasePressed()
+        {
+            if (_endTurnPending || AnyUnitMoving() || _movesInProgress > 0) return;
+            if (_battle == null || _battle.Phase != TurnPhase.Hero || _battle.Outcome != BattleOutcome.InProgress) return;
+
+            Debug.Log("Heroes end their phase.");
+            _pendingScroll = null;
+            ClearPathPreview();
+            EndHeroPhaseNow();
+        }
+
+        // Hero phase over: bank leftover actions, run the heroes' end-of-phase
+        // status countdowns, and hand the round to the enemies.
+        private void EndHeroPhaseNow()
+        {
+            _gridView.ClearHighlights();
+            _gridView.ClearPreviewOverlay();
+            _inventoryPanel.Hide();
+            if (_lootWindow != null) _lootWindow.Hide();
+
+            foreach (var hero in _partyMembers.ToList())
+            {
+                if (!hero.IsAlive) continue;
+                hero.Actions.EndPhase();
+                FinishTurnTick(hero);
+            }
+
+            _battle.EndHeroPhase();
+            BeginTurn();
+        }
+
+        private void UpdatePhaseLabels()
+        {
+            if (_battle == null) return;
+
+            if (_phaseLabel != null)
+            {
+                _phaseLabel.text = _battle.Outcome != BattleOutcome.InProgress ? _battle.Outcome.ToString()
+                    : _battle.Phase == TurnPhase.Hero ? $"Round {_battle.RoundNumber} - Hero phase"
+                    : $"Round {_battle.RoundNumber} - Enemy phase";
+            }
+
+            if (_actionsLabel != null)
+            {
+                var hero = _battle.Outcome == BattleOutcome.InProgress && _battle.Phase == TurnPhase.Hero ? _battle.CurrentUnit : null;
+                _actionsLabel.text = hero == null ? ""
+                    : $"{hero.DisplayName}: {ActionPoints.Format(hero.Actions.Remaining)} actions"
+                      + (hero.Actions.Banked > 0 ? $" (+{ActionPoints.Format(hero.Actions.Banked)} banked)" : "");
+            }
+        }
+
+        // In combat, a gear swap / potion / loot costs actions; out of combat it's free.
+        private bool CanPayInCombat(int actions)
+        {
+            if (!IsInCombat()) return true;
+            var hero = _battle != null ? _battle.CurrentUnit : null;
+            if (hero == null || !hero.Actions.CanSpendActions(actions))
+            {
+                Debug.Log("Not enough actions left for that.");
+                return false;
+            }
+            return true;
+        }
+
+        private void PayInCombat(int actions)
+        {
+            if (IsInCombat() && _battle.CurrentUnit != null) _battle.CurrentUnit.Actions.SpendActions(actions);
         }
 
         // Single entry point for switching what the current player's
@@ -710,8 +976,8 @@ namespace DungeonTower.UI
                 case ActionMode.Move:
                     _selectedAbilityIndex = 0;
                     _reachableTiles = unit.Status.CanMove
-                        ? MovementRangeCalculator.GetReachableTiles(
-                         unit.Position, unit.Stats.MoveRange, _movementMap, OccupiedTilesExcluding(unit))
+                        ? MovementRangeCalculator.GetReachableTilesWithBudget(
+                         unit.Position, unit.Actions.Remaining, _movementMap, OccupiedTilesExcluding(unit))
                         : new HashSet<GridPosition> { unit.Position };
                     _gridView.SetHighlights(_reachableTiles, Enumerable.Empty<GridPosition>());
                     _abilityBar.SetSelected(-1);
@@ -750,8 +1016,9 @@ namespace DungeonTower.UI
             public bool Stopped;
         }
 
-        // Ends the turn without moving or acting. Not a move, so it never arms
-        // Momentum and never triggers Bleed.
+        // This hero is done for the phase without moving or acting (leftover
+        // actions bank, up to 1). Not a move, so it never arms Momentum and
+        // never triggers Bleed.
         private void OnWaitSelected()
         {
             if (_endTurnPending) return;
@@ -759,9 +1026,10 @@ namespace DungeonTower.UI
             var unit = _battle.CurrentUnit;
             if (unit.Faction != Faction.Player) return;
 
-            Debug.Log($"{unit.DisplayName} waits.");
+            Debug.Log($"{unit.DisplayName} is done for this phase.");
             _pendingScroll = null;
-            EndTurn();
+            unit.Actions.MarkDone();   // whatever is left (up to 1 action) is banked
+            AfterHeroAction();
         }
 
         private int _movesInProgress;
@@ -807,7 +1075,10 @@ namespace DungeonTower.UI
                     view.StepTo(tile);
                     while (view.IsMoving) yield return null;   // glyph arrives first...
 
+                    var stepFrom = unit.Position;
                     unit.Position = tile;                      // ...then the game state catches up
+                    if (unit.Faction == Faction.Player)        // heroes pay for each step actually taken
+                        unit.Actions.Spend(GridSteps.StepCost(stepFrom, tile));
                     view.Refresh();
                     ResolveBattlefieldEntry(unit, tile);       // traps on THIS tile + fog refresh
 
@@ -922,6 +1193,12 @@ namespace DungeonTower.UI
                 return;
             }
 
+            if (!unit.Actions.CanSpendActions(ability.ActionCost))
+            {
+                Debug.Log($"{unit.DisplayName} needs {ability.ActionCost} action(s) for {ability.Name} but has {ActionPoints.Format(unit.Actions.Remaining)}.");
+                return;
+            }
+
             SetMode(ActionMode.Ability, index);
         }
 
@@ -935,6 +1212,7 @@ namespace DungeonTower.UI
             if (_battle == null || _battle.Outcome != BattleOutcome.InProgress) return;
             var unit = ResolveEquipTarget(targetIndex);
             if (unit == null) return;
+            if (!CanPayInCombat(EquipCostActions)) return;
 
             // Where it goes: off-hand gear to the off hand, two-handers to the
             // main hand (clearing the off hand), one-handers fill an empty hand
@@ -974,6 +1252,7 @@ namespace DungeonTower.UI
             if (_battle == null || _battle.Outcome != BattleOutcome.InProgress) return;
             var unit = ResolveEquipTarget(targetIndex);
             if (unit == null) return;
+            if (!CanPayInCombat(EquipCostActions)) return;
 
             if (!unit.Stats.TryEquipArmor(armor, out var previous))
             {
@@ -1011,6 +1290,8 @@ namespace DungeonTower.UI
                 Debug.Log($"{potion.Name} cannot be used yet — {potion.Ability.Name} is on cooldown ({unit.GetRemainingCooldown(potion.Ability)} turn(s) left).");
                 return;
             }
+            int potionCost = potion.Ability != null ? potion.Ability.ActionCost : EquipCostActions;
+            if (!CanPayInCombat(potionCost)) return;
             if (!unit.Belt.TryConsume(potion))
             {
                 Debug.Log($"{unit.DisplayName}'s belt doesn't have {potion.Name}.");
@@ -1018,7 +1299,7 @@ namespace DungeonTower.UI
             }
 
             ApplyPotionEffect(unit, potion);
-            ResolveEquipCost();
+            ResolveEquipCost(potionCost);
         }
 
         // Heal/Buff are the meaningful cases for a self-used potion;
@@ -1088,6 +1369,12 @@ namespace DungeonTower.UI
                 return;
             }
 
+            if (!unit.Actions.CanSpendActions(scroll.Ability.ActionCost))
+            {
+                Debug.Log($"{unit.DisplayName} needs {scroll.Ability.ActionCost} action(s) to read {scroll.Name} but has {ActionPoints.Format(unit.Actions.Remaining)}.");
+                return;
+            }
+
             _pendingScroll = scroll;
             _inventoryPanel.Hide();
             SetMode(ActionMode.Scroll);
@@ -1107,14 +1394,15 @@ namespace DungeonTower.UI
 
         // Out of combat, equipping/using is free — the panel stays open
         // so gear can be mixed and matched without reopening it each
-        // time. Once any enemy is alerted, it costs the current unit's
-        // turn like any other action, and the panel closes.
-        private void ResolveEquipCost()
+        // time. Once any enemy is alerted, it costs the current hero an
+        // action like any other, and the panel closes.
+        private void ResolveEquipCost(int actions = EquipCostActions)
         {
             if (IsInCombat())
             {
                 _inventoryPanel.Hide();
-                EndTurn();
+                PayInCombat(actions);
+                AfterHeroAction();
             }
             else
             {
@@ -1127,11 +1415,9 @@ namespace DungeonTower.UI
         {
             if (unit == null || unit.Faction != Faction.Player) return;
 
-            if (unit.WeaponAbilities.Count > 0) _abilityBar.Show(unit.WeaponAbilities, unit.GetRemainingCooldown,
-    a => SilenceRules.IsBlocked(unit, a, AbilitySource.Weapon) || !unit.CanAfford(a));
-            else _abilityBar.ShowMoveOnly();
-
+            ShowAbilityBar(unit);
             SetMode(ActionMode.Move);
+            UpdatePhaseLabels();
         }
 
         private bool IsInCombat() => _unitViews.Keys.Any(u => u.Faction == Faction.Enemy && u.IsAlive && u.IsAlerted);
@@ -1272,6 +1558,7 @@ namespace DungeonTower.UI
             if (_battle.CurrentUnit.Faction != Faction.Player) return;
 
             HandleCancelInput();
+            HandleHeroCycleInput();
             HandleHoverPreview();
 
             if (Mouse.current == null || !Mouse.current.leftButton.wasPressedThisFrame) return;
@@ -1283,6 +1570,13 @@ namespace DungeonTower.UI
             var clicked = ScreenPointToGridPosition(Mouse.current.position.ReadValue());
             if (clicked != null)
                 HandlePlayerClick(clicked.Value);
+        }
+
+        // Tab switches to the next hero who still has actions.
+        private void HandleHeroCycleInput()
+        {
+            if (Keyboard.current != null && Keyboard.current.tabKey.wasPressedThisFrame)
+                SelectNextHero();
         }
 
         // Right-click or Escape backs out of Ability/Scroll aim to Move,
@@ -1364,12 +1658,18 @@ namespace DungeonTower.UI
                 if (target.Equals(acting.Position))
                 {
                     Debug.Log($"{acting.DisplayName} is rooted and holds position.");
-                    EndTurn();
+                    acting.Actions.MarkDone();
+                    AfterHeroAction();
                 }
                 return;
             }
 
             var occupant = FindLivingUnitAt(target);
+            if (occupant != null && occupant != acting && occupant.Faction == Faction.Player)
+            {
+                SelectHero(occupant);   // clicking another hero makes them the acting hero
+                return;
+            }
             if (occupant != null || !_reachableTiles.Contains(target))
             {
                 ClearPathPreview();   // clicked somewhere invalid: drop the preview
@@ -1380,7 +1680,7 @@ namespace DungeonTower.UI
             {
                 ClearPathPreview();   // second click on the same tile: go
                 MoveUnit(acting, target);
-                EndTurn();
+                AfterHeroAction();
                 return;
             }
 
@@ -1414,15 +1714,16 @@ namespace DungeonTower.UI
             if (ability == null) return;
             if (!GetValidAbilityTargetTiles(acting, ability).Contains(target)) return;
 
-            // Lock the aiming UI, spend the scroll, then play the attack out;
-            // EndTurn waits for the sequence the same way it waits for a walk.
+            // Lock the aiming UI, spend the scroll and the actions, then play the
+            // attack out; what happens next waits for the sequence the same way it waits for a walk.
             _gridView.ClearHighlights();
             _gridView.ClearPreviewOverlay();
             if (isScroll) acting.Belt.TryConsume(_pendingScroll);
             _pendingScroll = null;
 
+            acting.Actions.SpendActions(ability.ActionCost);
             StartCoroutine(TrackedAction(PerformAbility(acting, ability, target)));
-            EndTurn();
+            AfterHeroAction();
         }
 
         // How many rounds a pack keeps chasing a stale sighting before
@@ -2404,6 +2705,7 @@ namespace DungeonTower.UI
 
         private void OnLootWeaponTakeRequested(ILootContainer container, IWeapon weapon)
         {
+            if (!CanPayInCombat(LootCostActions)) return;
             container.TakeWeapon(weapon);
             _inventory.AddWeapon(weapon);
             Debug.Log($"Looted {weapon.Name}.");
@@ -2413,6 +2715,7 @@ namespace DungeonTower.UI
 
         private void OnLootArmorTakeRequested(ILootContainer container, IArmor armor)
         {
+            if (!CanPayInCombat(LootCostActions)) return;
             container.TakeArmor(armor);
             _inventory.AddArmor(armor);
             Debug.Log($"Looted {armor.Name}.");
@@ -2422,6 +2725,7 @@ namespace DungeonTower.UI
 
         private void OnLootPotionTakeRequested(ILootContainer container, IPotion potion)
         {
+            if (!CanPayInCombat(LootCostActions)) return;
             container.TakePotion(potion);
             _inventory.AddPotion(potion);
             Debug.Log($"Looted {potion.Name}.");
@@ -2431,6 +2735,7 @@ namespace DungeonTower.UI
 
         private void OnLootScrollTakeRequested(ILootContainer container, IScroll scroll)
         {
+            if (!CanPayInCombat(LootCostActions)) return;
             container.TakeScroll(scroll);
             _inventory.AddScroll(scroll);
             Debug.Log($"Looted {scroll.Name}.");
@@ -2443,6 +2748,7 @@ namespace DungeonTower.UI
         // mutates the very list/dictionary being iterated.
         private void OnTakeAllLootRequested()
         {
+            if (!CanPayInCombat(LootCostActions)) return;
             foreach (var container in GetLootableContainersInRange(_battle.CurrentUnit))
             {
                 foreach (var weapon in container.Weapons.ToList())
@@ -2495,8 +2801,8 @@ namespace DungeonTower.UI
 
         // Matches equip/potion/scroll precedent exactly: free to loot
         // out of combat, but once any enemy is alerted, taking something
-        // (including via Take All) costs the current unit's turn like
-        // any other action, and the window closes. That means each
+        // (including via Take All) costs the current hero an action like
+        // any other, and the window closes. That means each
         // individual take can end the turn mid-combat, same as equip
         // today — if you'd rather the whole visit be one action (grab
         // several things, pay once on close), this is the spot to change.
@@ -2505,7 +2811,8 @@ namespace DungeonTower.UI
             if (IsInCombat())
             {
                 if (_lootWindow != null) _lootWindow.Hide();
-                EndTurn();
+                PayInCombat(LootCostActions);
+                AfterHeroAction();
             }
             else
             {
@@ -2784,7 +3091,7 @@ namespace DungeonTower.UI
 
         private IEnumerator WalkSwarm()
         {
-            // Once-per-move effects, in initiative order.
+            // Once-per-move effects, nearest-to-the-party first.
             foreach (var m in _swarmMoves)
             {
                 var moveTick = m.Unit.Status.OnMoved();
@@ -2810,7 +3117,7 @@ namespace DungeonTower.UI
 
                 while (_swarmMoves.Any(m => _unitViews[m.Unit].IsMoving)) yield return null;
 
-                // ...then the game state catches up, in initiative order.
+                // ...then the game state catches up, nearest-to-the-party first.
                 foreach (var m in _swarmMoves)
                 {
                     if (m.Stopped || i >= m.Path.Count || !m.Unit.IsAlive) continue;
@@ -2862,9 +3169,13 @@ namespace DungeonTower.UI
             }
         }
 
+        // Enemy flow: the current enemy is finished. (Heroes go through
+        // AfterHeroAction instead; a stray call during the hero phase is
+        // routed there so it can never skip the enemy bookkeeping.)
         private void EndTurn()
         {
             ClearPathPreview();
+            if (_battle != null && _battle.Phase == TurnPhase.Hero) { AfterHeroAction(); return; }
             if (_endTurnPending) return;
             if (_movesInProgress > 0) { StartCoroutine(EndTurnAfterMovement()); return; }
             EndTurnNow();

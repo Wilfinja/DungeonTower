@@ -10,7 +10,7 @@ namespace DungeonTower.Core
             hp: b.Hp * factor, mp: b.Mp * factor,
             physicalAttack: b.PhysicalAttack * factor, physicalDefense: b.PhysicalDefense * factor,
             magicAttack: b.MagicAttack * factor, magicDefense: b.MagicDefense * factor,
-            initiative: b.Initiative * factor, moveRange: b.MoveRange * factor,
+            moveRange: b.MoveRange * factor,
             statusResist: b.StatusResist * factor, critChance: b.CritChance * factor,
             supportPower: b.SupportPower * factor, potency: b.Potency * factor,
             healingReceived: b.HealingReceived * factor, mpRegen: b.MpRegen * factor);

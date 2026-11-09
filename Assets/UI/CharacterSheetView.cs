@@ -63,7 +63,7 @@ namespace DungeonTower.UI
         [Header("Stats")]
         [SerializeField] private TextMeshProUGUI _pointsLabel;
         [SerializeField] private List<StatRow> _statRows = new List<StatRow>();
-        [Tooltip("Attack, defense, initiative, move range, resist, crit — one line each.")]
+        [Tooltip("Attack, defense, actions per turn, resist, potency — one line each.")]
         [SerializeField] private TextMeshProUGUI _derivedLabel;
 
         [Header("Equipment")]
@@ -216,7 +216,6 @@ namespace DungeonTower.UI
                 h = h * 31 + Mathf.RoundToInt(s.PhysicalDefense * 10f);
                 h = h * 31 + Mathf.RoundToInt(s.MagicAttack * 10f);
                 h = h * 31 + Mathf.RoundToInt(s.MagicDefense * 10f);
-                h = h * 31 + s.Initiative;
                 h = h * 31 + s.MoveRange;
                 h = h * 31 + Mathf.RoundToInt(s.StatusResist * 10f);
                 h = h * 31 + Mathf.RoundToInt(s.CritChance * 10f);
@@ -270,8 +269,7 @@ namespace DungeonTower.UI
                 $"Physical Defense: {UiText.Num(s.PhysicalDefense)}\n" +
                 $"Magic Attack: {UiText.Num(s.MagicAttack)}\n" +
                 $"Magic Defense: {UiText.Num(s.MagicDefense)}\n" +
-                $"Initiative: {s.Initiative}\n" +
-                $"Move Range: {s.MoveRange}\n" +
+                $"Actions per turn: {ActionPoints.BaseActions} (bank up to {ActionPoints.MaxBankedHalf / ActionPoints.HalfPerAction} extra)\n" +
                 $"Status Resist: {UiText.Num(s.StatusResist)}%\n" +
                 $"Potency: {UiText.Num(s.Potency)}%\n" +
                 $"Support Power: {UiText.Num(s.SupportPower)}\n" +
