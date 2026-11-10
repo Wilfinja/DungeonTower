@@ -798,7 +798,8 @@ namespace DungeonTower.UI
         private void ShowAbilityBar(CombatUnit unit)
         {
             if (unit.WeaponAbilities.Count > 0)
-                _abilityBar.Show(unit.WeaponAbilities, unit.GetRemainingCooldown, a => AbilityBlocked(unit, a));
+                _abilityBar.Show(unit.WeaponAbilities, unit.GetRemainingCooldown, a => AbilityBlocked(unit, a),
+                    a => ItemDescriber.Describe(a, unit.Stats));
             else _abilityBar.ShowMoveOnly();
         }
 
@@ -2397,8 +2398,11 @@ namespace DungeonTower.UI
         // same way a player's does. What happens to each target is
         // decided per-target by ApplyAbilityEffect (Damage/Heal/Buff),
         // since that decision doesn't depend on Single vs AoE.
+        private GridPosition _currentImpactTile;   // where the ability being resolved was aimed (for hit-effect direction)
+
         private void ExecuteAbilityAt(CombatUnit attacker, IAbility ability, GridPosition impactTile)
         {
+            _currentImpactTile = impactTile;
             attacker.TriggerCooldown(ability);
             attacker.SpendMp(ability.MpCost);   // weapon + scroll abilities only; potions resolve elsewhere
 
@@ -3371,7 +3375,16 @@ namespace DungeonTower.UI
             if (v == null) return;
 
             Quaternion? rotation = null;
-            if (v.OrientImpactToAttack)
+            if (v.ImpactMatchesRecoil)
+            {
+                // Same direction HitFeedback knocks the unit back: away from
+                // the hit's origin, or away from the caster if dead center.
+                var pos = GridToWorld.ToWorldPosition(tile);
+                var away = pos - HitOrigin(attacker, ability, _currentImpactTile);
+                if (away.sqrMagnitude < 0.0001f) away = pos - GridToWorld.ToWorldPosition(attacker.Position);
+                if (away.sqrMagnitude > 0.0001f) rotation = FacingRotation(away);
+            }
+            else if (v.OrientImpactToAttack)
             {
                 var direction = GridToWorld.ToWorldPosition(tile) - GridToWorld.ToWorldPosition(attacker.Position);
                 if (direction.sqrMagnitude > 0.0001f) rotation = FacingRotation(direction);

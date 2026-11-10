@@ -23,6 +23,13 @@ namespace DungeonTower.UI
     /// </summary>
     public sealed class AbilityBarView : MonoBehaviour
     {
+        [Header("Hover text")]
+        [TextArea, SerializeField] private string _moveTooltip =
+            "<b>Move</b>\nWalk to a tile. Each step costs 1 action (1.5 diagonally). While exploring it's free and the party follows.";
+        [TextArea, SerializeField] private string _waitTooltip =
+            "<b>Wait</b>\nEnd this hero's turn. Up to 1 unspent action carries over to next turn.";
+
+        [Header("Buttons")]
         [SerializeField] private Button _moveButton;
         [SerializeField] private TextMeshProUGUI _moveLabel;
         [SerializeField] private Button _waitButton;
@@ -62,11 +69,17 @@ namespace DungeonTower.UI
                 if (_buttons[i] != null) _buttons[i].onClick.AddListener(() => AbilitySelected?.Invoke(index));
             }
             if (_waitButton != null) _waitButton.onClick.AddListener(() => WaitSelected?.Invoke());
+
+            TooltipTrigger.Attach(_moveButton.gameObject, () => _moveTooltip);
+            if (_waitButton != null) TooltipTrigger.Attach(_waitButton.gameObject, () => _waitTooltip);
         }
 
         // remainingCooldown(ability) should return 0 for "ready", or the
         // number of the unit's own turns left before it's usable again.
-        public void Show(IReadOnlyList<IAbility> abilities, Func<IAbility, int> remainingCooldown, Func<IAbility, bool> isBlocked = null)
+        // describe(ability) gives the hover text for each ability button
+        // (range, cost, damage, cooldown, ...). Optional.
+        public void Show(IReadOnlyList<IAbility> abilities, Func<IAbility, int> remainingCooldown,
+            Func<IAbility, bool> isBlocked = null, Func<IAbility, string> describe = null)
         {
             EnsureArrays();
             gameObject.SetActive(true);
@@ -90,6 +103,11 @@ namespace DungeonTower.UI
 
                 button.gameObject.SetActive(has);
                 if (has && _labels[i] != null) SetAbilityButton(button, _labels[i], abilities[i], remainingCooldown, isBlocked);
+                if (has && describe != null)
+                {
+                    var ability = abilities[i];
+                    TooltipTrigger.Attach(button.gameObject, () => describe(ability));
+                }
             }
         }
 

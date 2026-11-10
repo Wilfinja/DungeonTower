@@ -46,6 +46,8 @@ namespace DungeonTower.Items
         public GameObject ImpactEffectPrefab;
         [Tooltip("Rotate the impact effect to point from the attacker through the target (author it facing RIGHT).")]
         public bool OrientImpactToAttack;
+        [Tooltip("On: the impact effect (and its sparks) points the way the hit unit recoils - away from where the hit came from (the caster, or the middle of a blast). Overrides 'Orient Impact To Attack'. Author the effect facing RIGHT.")]
+        public bool ImpactMatchesRecoil = true;
         [Tooltip("Explosion-style effect for area abilities.")]
         public GameObject AreaEffectPrefab;
         [Tooltip("Off = once at the aimed tile. On = on every tile of the footprint (good for lines/cones).")]
