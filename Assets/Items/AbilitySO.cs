@@ -25,7 +25,7 @@ namespace DungeonTower.Items
         [SerializeField] private EffectKind _effectKind = EffectKind.Damage;
 
         [Header("Scaling - what powers this ability (Damage attack power / Heal bonus)")]
-        [Tooltip("Each entry adds Weight x that stat's power: Body = Physical Attack, Mind = Magic Attack, Spirit = Support Power. Guide: a pure one-stat ability totals about 1.0, a hybrid spread over two or more stats about 1.2. Leave EMPTY to use the old Kind + Damage Multiplier (damage) or Heal Support Multiplier (heal) instead.")]
+        [Tooltip("Each entry adds Weight x that stat's power: Body = Physical Attack, Mind = Magic Attack, Spirit = Support Power. These only decide how strong the ability is - all entries are added together into ONE number (e.g. Body 1.1 + Spirit 1.2 = 1.1 x Physical Attack + 1.2 x Support Power). Which defense that number is reduced by is chosen separately by Kind below, so Body/Mind/Spirit never pick a defense. Guide: a pure one-stat ability totals about 1.0, a hybrid spread over two or more stats about 1.2. Leave EMPTY to use the old Kind + Damage Multiplier (damage) or Heal Support Multiplier (heal) instead.")]
         [SerializeField] private List<StatWeight> _statWeights = new List<StatWeight>();
         [Tooltip("Calculated from the list above - anything typed here is overwritten.")]
         [SerializeField, AutoField] private string _scalingSummary;
