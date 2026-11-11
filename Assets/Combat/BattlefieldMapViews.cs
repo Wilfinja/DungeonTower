@@ -21,18 +21,27 @@ namespace DungeonTower.Combat
     public sealed class MovementMapView : IWalkableMap
     {
         private readonly IWalkableMap _baseMap;
+        private readonly ISightBlockingMap _baseSight;
+        private readonly bool _closedDoorsBlock;
         private readonly BattlefieldObjectRegistry _registry;
 
-        public MovementMapView(IWalkableMap baseMap, BattlefieldObjectRegistry registry)
+        // closedDoorsBlock false gives the "if every door were open" view an
+        // enemy uses to plan a route through a door it is about to open.
+        public MovementMapView(IWalkableMap baseMap, BattlefieldObjectRegistry registry, bool closedDoorsBlock = true)
         {
             _baseMap = baseMap;
+            _baseSight = baseMap as ISightBlockingMap;
             _registry = registry;
+            _closedDoorsBlock = closedDoorsBlock;
         }
 
         public bool InBounds(GridPosition position) => _baseMap.InBounds(position);
 
+        // A closed door is the one see-blocking tile that is otherwise walkable.
         public bool IsWalkable(GridPosition position)
-            => _baseMap.IsWalkable(position) && !_registry.BlocksMovementAt(position);
+            => _baseMap.IsWalkable(position)
+               && (!_closedDoorsBlock || _baseSight == null || !_baseSight.BlocksSight(position))
+               && !_registry.BlocksMovementAt(position);
     }
 
     public sealed class SightMapView : IWalkableMap
