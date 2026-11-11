@@ -86,6 +86,11 @@ namespace DungeonTower.Core
         // Who the effect lands on, whatever the polarity says. "Allies" means
         // the caster's own side (the caster included), "enemies" the other
         // side. Both false (the default) = affect everyone the area covers.
+        // Enemy AI only: 0 = the enemy weighs this by damage per action. Higher
+        // = it uses this ability first whenever it can (cooldown, MP, range
+        // and actions allow); negative = it never uses it on its own.
+        int AiPriority { get; }
+
         bool IgnoreEnemies { get; }
         bool IgnoreAllies { get; }
 

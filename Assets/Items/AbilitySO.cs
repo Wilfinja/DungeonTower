@@ -102,6 +102,10 @@ namespace DungeonTower.Items
         [Tooltip("How many actions this costs a hero (they get 3 per turn; a step costs 1, a diagonal step 1.5). Enemies ignore this.")]
         [SerializeField, Range(1, 3)] private int _actionCost = 1;
 
+        [Header("Enemy AI")]
+        [Tooltip("Only used when an enemy holds this ability. 0 = the enemy picks by damage per action (it already favors strong multi-action abilities). Higher = it uses this one first whenever it can. Negative = it never uses it on its own.")]
+        [SerializeField, Range(-3, 3)] private int _aiPriority = 0;
+
         [Header("Who it affects")]
         [Tooltip("Skip enemies of the caster even if the area covers them (e.g. an area heal that shouldn't heal enemies). Single-target abilities can't pick an enemy.")]
         [SerializeField] private bool _ignoreEnemies;
@@ -133,6 +137,7 @@ namespace DungeonTower.Items
         public int MpCost => _mpCost;
         public int ActionCost => Mathf.Max(1, _actionCost);
         public bool Silenceable => _silenceable;
+        public int AiPriority => _aiPriority;
         public bool IgnoreEnemies => _ignoreEnemies;
         public bool IgnoreAllies => _ignoreAllies;
 
