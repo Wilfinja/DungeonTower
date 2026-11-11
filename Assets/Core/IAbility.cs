@@ -83,6 +83,12 @@ namespace DungeonTower.Core
         // existing ability keeps working while silenced.
         bool Silenceable { get; }
 
+        // Who the effect lands on, whatever the polarity says. "Allies" means
+        // the caster's own side (the caster included), "enemies" the other
+        // side. Both false (the default) = affect everyone the area covers.
+        bool IgnoreEnemies { get; }
+        bool IgnoreAllies { get; }
+
         // Cleanse-only. Which statuses to strip from each target: empty
         // means "every Harmful status" (a general cleanse); otherwise
         // exactly the listed ones, whatever their polarity (a Bandage
