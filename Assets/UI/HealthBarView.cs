@@ -29,6 +29,11 @@ namespace DungeonTower.UI
         [SerializeField] private StatusRowView _statusRow; // optional
         [SerializeField] private Vector3 _worldOffset = new Vector3(0f, 0.6f, 0f);
 
+        [Header("MP bar (optional) - a thin Slider under the HP bar")]
+        [SerializeField] private Slider _mpSlider;
+        [Tooltip("Show MP only on heroes (enemy mana stays a secret).")]
+        [SerializeField] private bool _mpHeroesOnly = true;
+
         [Header("Damage chip (optional)")]
         [Tooltip("A second Slider placed BEHIND the main one with a pale fill. It lingers, then drains down to the real HP.")]
         [SerializeField] private Slider _chipSlider;
@@ -102,6 +107,19 @@ namespace DungeonTower.UI
             }
 
             UpdateChip(_unit.CurrentHp, max, showBar);
+
+            if (_mpSlider != null)
+            {
+                int maxMp = _unit.Stats.MaxMp;
+                bool showMp = alive && _fogVisible && maxMp > 0 && _unit.CurrentMp < maxMp
+                    && (!_mpHeroesOnly || _unit.Faction == Faction.Player);
+                _mpSlider.gameObject.SetActive(showMp);
+                if (showMp)
+                {
+                    _mpSlider.maxValue = maxMp;
+                    _mpSlider.value = _unit.CurrentMp;
+                }
+            }
 
             if (_statusRow != null)
                 _statusRow.Refresh(alive && _fogVisible ? _unit : null);

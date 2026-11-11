@@ -56,6 +56,8 @@ namespace DungeonTower.UI
         [SerializeField] private TurnTrackerView _turnTracker;
         [SerializeField] private GameObject _lootToggleButton;
         [SerializeField] private HealthBarView _healthBarPrefab;
+        [Tooltip("Optional. The always-on HP/MP panel for the party.")]
+        [SerializeField] private PartyHudView _partyHud;
         // Optional. Plays hit stop, shake, numbers, and sound for each ability.
         [SerializeField] private HitFeedback _hitFeedback;
         [SerializeField] private RectTransform _healthBarContainer;
@@ -328,6 +330,13 @@ namespace DungeonTower.UI
                 _characterSheet.Hide();
             }
             RefreshLevelUpBadge();
+
+            if (_partyHud != null)
+            {
+                _partyHud.Bind(_partyMembers, () => _battle != null && _battle.Phase == TurnPhase.Hero ? _battle.CurrentUnit : null, IsInCombat);
+                _partyHud.HeroClicked -= SelectHero;
+                _partyHud.HeroClicked += SelectHero;
+            }
 
             foreach (var unit in units)
                 SpawnUnitView(unit);
