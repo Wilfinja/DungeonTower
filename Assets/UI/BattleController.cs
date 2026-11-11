@@ -60,6 +60,8 @@ namespace DungeonTower.UI
         [SerializeField] private HitFeedback _hitFeedback;
         [SerializeField] private RectTransform _healthBarContainer;
         [SerializeField] private List<Chest> _chests = new List<Chest>();
+        [Tooltip("Prefab for the chests the game places each floor from the theme's chest loot (a Chest component plus a SpriteRenderer). Leave empty for no generated chests.")]
+        [SerializeField] private Chest _chestPrefab;
 
         [Header("Phase UI (optional)")]
         [Tooltip("Shows e.g. 'Round 3 - Hero phase' / 'Enemy phase'.")]
@@ -330,12 +332,63 @@ namespace DungeonTower.UI
             foreach (var unit in units)
                 SpawnUnitView(unit);
 
+            PlaceThemeChests(dungeon, units);
+
             _heroPhaseRound = -1;
             _lastTickedRound = -1;
             _battle = new Battle(units) { EndOnEnemiesDefeated = false };
             _battle.Start();
             RefreshFogOfWar();
             BeginTurn();
+        }
+
+        // ---- Themed chests ------------------------------------------------
+        // Each floor gets a random number of chests (set on the theme), put in
+        // different rooms where they won't block a doorway: away from the
+        // party's start, the stairs, enemies and other chests, and preferably
+        // against a wall. What's inside comes from the theme's chest loot,
+        // scaled to the floor (see ChestLootRoller).
+        private void PlaceThemeChests(GeneratedDungeon dungeon, List<CombatUnit> units)
+        {
+            var theme = _themeRegistry != null ? _themeRegistry.GetThemeForFloor(_currentFloor) : null;
+            if (theme == null || _chestPrefab == null) return;
+
+            int count = _rng.Next(theme.MinChestsPerFloor, theme.MaxChestsPerFloor + 1);
+            if (count <= 0) return;
+
+            var corridor = new HashSet<GridPosition>(dungeon.GetCorridorTiles());
+            var avoid = new List<GridPosition>(dungeon.ExitTiles);
+            avoid.AddRange(units.Select(u => u.Position));
+
+            var rooms = dungeon.Rooms.OrderBy(_ => _rng.Next()).ToList();
+            var placed = new List<GridPosition>();
+
+            for (int i = 0; i < count && rooms.Count > 0; i++)
+            {
+                var room = rooms[i % rooms.Count];
+
+                // Never within 2 tiles of a doorway/corridor, 6 of the party or stairs, or 2 of another chest.
+                var candidates = room.Tiles().Where(t =>
+                    !placed.Contains(t)
+                    && !corridor.Any(c => c.ManhattanDistance(t) <= 2)
+                    && !avoid.Any(a => a.ManhattanDistance(t) <= 6)
+                    && !placed.Any(c => c.ManhattanDistance(t) <= 2)).ToList();
+                if (candidates.Count == 0) continue;
+
+                var againstWall = candidates.Where(t =>
+                    !_map.IsWalkable(new GridPosition(t.X + 1, t.Y)) || !_map.IsWalkable(new GridPosition(t.X - 1, t.Y))
+                    || !_map.IsWalkable(new GridPosition(t.X, t.Y + 1)) || !_map.IsWalkable(new GridPosition(t.X, t.Y - 1))).ToList();
+                var pool = againstWall.Count > 0 ? againstWall : candidates;
+                var tile = pool[_rng.Next(pool.Count)];
+
+                var chest = Instantiate(_chestPrefab, GridToWorld.ToWorldPosition(tile), Quaternion.identity, transform);
+                chest.Place(tile);
+                ChestLootRoller.Fill(chest, theme, _currentFloor, _rng);
+                _chests.Add(chest);
+                placed.Add(tile);
+            }
+
+            Debug.Log($"Floor {_currentFloor}: placed {placed.Count} chest(s).");
         }
 
         // Placeholder stash so there's something to test the equip/use
