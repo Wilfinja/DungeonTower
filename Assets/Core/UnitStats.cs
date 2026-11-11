@@ -71,6 +71,30 @@ namespace DungeonTower.Core
         // MP regained at the start of this unit's own turn while in combat.
         public float MpRegen => Math.Max(0f, DerivedStatFormulas.MpRegen(Current) + TotalBonus.MpRegen);
 
+        public int PassiveHPRegen
+        {
+            get
+            {
+                int total = 0;
+                var list = EquippedArmor?.Passives;
+                if (list != null) foreach (var p in list) total += p.passivehpRegen;
+                return total;
+            }
+
+
+        }
+
+        public int PassiveMpRegen
+        {
+            get
+            {
+                int total = 0;
+                var list = EquippedArmor?.Passives;
+                if (list != null) foreach (var p in list) total += p.passivempRegen;
+                return total;
+            }
+        }
+
         public UnitStats(StatBlock startingStats, int startingLevel = 1, int startingPoints = 0)
         {
             Level = startingLevel;

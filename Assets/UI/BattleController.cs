@@ -3503,6 +3503,8 @@ namespace DungeonTower.UI
         {
             bool wasAlive = ending.IsAlive;
             var endTick = ending.Status.OnTurnEnd();
+            ending.ReceiveHeal(ending.Stats.PassiveHPRegen);
+            ending.RestoreMp(ending.Stats.PassiveMpRegen);
             foreach (var line in endTick.Log) Debug.Log(line);
             if (wasAlive && !ending.IsAlive)
             {

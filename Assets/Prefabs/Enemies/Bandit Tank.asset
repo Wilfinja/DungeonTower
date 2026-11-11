@@ -24,8 +24,13 @@ MonoBehaviour:
   _alertRadius: 3
   _actionsPerTurn: 3
   _xpReward: 10
-  _dropChance: 0
-  _drops: []
+  _dropChance: 50
+  _drops:
+  - _potion: {fileID: 11400000, guid: fc38316a7c7a8754ea6e66665325384b, type: 2}
+    _scroll: {fileID: 0}
+    _minCount: 0
+    _maxCount: 1
+    _weight: 1
   _targetingStrategy: 5
   _targetingRange: 8
   _supportTargetingStrategy: 0

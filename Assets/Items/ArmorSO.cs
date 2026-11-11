@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using DungeonTower.Core;
 using UnityEngine;
 
@@ -16,6 +17,8 @@ namespace DungeonTower.Items
         [SerializeField] private PrimaryStat _requiredStat;
         [SerializeField, Min(0)] private int _requiredStatValue = 4;
         [SerializeField] private DerivedStatBonus _passiveBonus;
+        [Tooltip("Passive effects this armor gives while worn (drag ArmorPassive assets here).")]
+        [SerializeField] private List<PassiveSO> _passives = new List<PassiveSO>();
         [SerializeField] private bool _dropsOnDeath = true;
 
         public string Name => _armorName;
@@ -23,6 +26,7 @@ namespace DungeonTower.Items
         public PrimaryStat RequiredStat => _requiredStat;
         public int RequiredStatValue => _requiredStatValue;
         public DerivedStatBonus PassiveBonus => _passiveBonus;
+        public IReadOnlyList<IPassive> Passives => _passives;
         public bool DropsOnDeath => _dropsOnDeath;
 
         public bool CanEquip(StatBlock stats) => stats.Get(RequiredStat) >= RequiredStatValue;

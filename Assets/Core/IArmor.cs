@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace DungeonTower.Core
 {
     /// <summary>
@@ -17,6 +19,7 @@ namespace DungeonTower.Core
         PrimaryStat RequiredStat { get; }
         int RequiredStatValue { get; }
         DerivedStatBonus PassiveBonus { get; }
+        IReadOnlyList<IPassive> Passives { get; }
 
         // False for something intrinsic to the creature (thick hide,
         // etc.) rather than a real piece of gear, so it never shows up

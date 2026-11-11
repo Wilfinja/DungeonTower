@@ -14,14 +14,20 @@ MonoBehaviour:
   m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.EnemySO
   _displayName: Bandit
   _role: 7
-  _body: 5
-  _mind: 3
-  _spirit: 4
+  _body: 4
+  _mind: 2
+  _spirit: 2
   _weapon: {fileID: 11400000, guid: 29ff215a918935545be78480ff777074, type: 2}
+  _offHand: {fileID: 0}
   _armor: {fileID: 11400000, guid: a0a08febff7ae974b9429d1c71521a6f, type: 2}
   _detectionRadius: 4
   _alertRadius: 3
+  _actionsPerTurn: 3
+  _xpReward: 10
+  _dropChance: 0
+  _drops: []
   _targetingStrategy: 0
   _targetingRange: 8
   _supportTargetingStrategy: 3
   _supportHealThreshold: 50
+  actionPoints: 0

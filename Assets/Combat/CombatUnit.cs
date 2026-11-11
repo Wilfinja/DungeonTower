@@ -25,6 +25,7 @@ namespace DungeonTower.Combat
         public IWeapon MainHand { get; private set; }
         public IWeapon OffHand { get; private set; }
         public IWeapon EquippedWeapon => MainHand;
+        public IArmor Armor { get; }
 
         // What the ability bar shows: main hand's abilities, then the off
         // hand's, identical ones listed once, at most HandRules.MaxAbilities.
