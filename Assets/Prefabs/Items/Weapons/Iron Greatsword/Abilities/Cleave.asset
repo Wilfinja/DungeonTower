@@ -12,10 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9b3c6b5e23a327447837fee5b5dbebb7, type: 3}
   m_Name: Cleave
   m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.AbilitySO
-  _abilityName: 
+  _abilityName: Cleave
   _effectKind: 0
-  _statWeights: []
-  _scalingSummary: 
+  _statWeights:
+  - Stat: 0
+    Weight: 0.85
+  _scalingSummary: 'Total weight 0.85 = Body 0.85  (guide: pure 1.0, hybrid 1.2)'
   _kind: 0
   _damageMultiplier: 1
   _critChance: 5
@@ -55,11 +57,12 @@ MonoBehaviour:
   _summonBlocksMovement: 0
   _summonBlocksLineOfSight: 0
   _range: 1
-  _areaShape: 0
+  _areaShape: 1
   _areaRadius: 0
   _cooldownTurns: 0
   _mpCost: 0
   _actionCost: 1
+  _aiPriority: 0
   _ignoreEnemies: 0
   _ignoreAllies: 0
   _visuals:
