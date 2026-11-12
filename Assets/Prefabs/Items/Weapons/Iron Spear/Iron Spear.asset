@@ -25,7 +25,6 @@ MonoBehaviour:
     PhysicalDefense: 0
     MagicAttack: 0
     MagicDefense: 0
-    Initiative: 0
     MoveRange: 0
     StatusResist: 0
     CritChance: 0
@@ -36,4 +35,5 @@ MonoBehaviour:
   _abilities:
   - {fileID: 11400000, guid: 6ffa938b35f4b8643a57aaa3d34ccbd3, type: 2}
   - {fileID: 11400000, guid: bfd0245a9632efe49a483ba1b7ca0753, type: 2}
+  - {fileID: 11400000, guid: 3c6b43485cec84f4b9a3fa5b6c3fa246, type: 2}
   _dropsOnDeath: 1

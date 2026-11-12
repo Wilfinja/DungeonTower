@@ -30,3 +30,18 @@ MonoBehaviour:
   - Role: 1
     Weight: 0.25
   _maxBossesPerFloor: 1
+  _minChestsPerFloor: 1
+  _maxChestsPerFloor: 3
+  _minRollsPerChest: 1
+  _maxRollsPerChest: 2
+  _floorsPerExtraRoll: 0
+  _chestLoot:
+  - Weapon: {fileID: 11400000, guid: 29ff215a918935545be78480ff777074, type: 2}
+    Armor: {fileID: 0}
+    Potion: {fileID: 0}
+    Scroll: {fileID: 0}
+    Weight: 0
+    MinFloor: 0
+    MaxFloor: 0
+    MinCount: 0
+    MaxCount: 0

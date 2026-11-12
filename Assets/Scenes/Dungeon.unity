@@ -1705,6 +1705,7 @@ MonoBehaviour:
   _hitFeedback: {fileID: 209310944}
   _healthBarContainer: {fileID: 880976071}
   _chests: []
+  _chestPrefab: {fileID: 5502734394114668963, guid: 32c6ca6e26901bb46aac9f77e95e2887, type: 3}
   _phaseLabel: {fileID: 0}
   _actionsLabel: {fileID: 0}
   _defaultParty:
@@ -7507,6 +7508,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 03f9a78157816bb4bbc573748a78c791, type: 3}
   m_Name: 
   m_EditorClassIdentifier: DungeonTower.UI::DungeonTower.UI.AbilityBarView
+  _moveTooltip: '<b>Move</b>
+
+    Walk to a tile. Each step costs 1 action (1.5 diagonally).
+    While exploring it''s free and the party follows.'
+  _waitTooltip: '<b>Wait</b>
+
+    End this hero''s turn. Up to 1 unspent action carries
+    over to next turn.'
   _moveButton: {fileID: 969628514}
   _moveLabel: {fileID: 28169969}
   _waitButton: {fileID: 793107410}

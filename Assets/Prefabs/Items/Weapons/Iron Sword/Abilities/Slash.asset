@@ -14,10 +14,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.AbilitySO
   _abilityName: Slash
   _effectKind: 0
+  _statWeights:
+  - Stat: 0
+    Weight: 1.2
+  _scalingSummary: 'Total weight 1.20 = Body 1.20  (guide: pure 1.0, hybrid 1.2)'
   _kind: 0
   _damageMultiplier: 1
+  _critChance: 5
   _healHp: 0
   _healMp: 0
+  _healSupportMultiplier: 0
   _bonus:
     Hp: 0
     Mp: 0
@@ -25,14 +31,19 @@ MonoBehaviour:
     PhysicalDefense: 0
     MagicAttack: 0
     MagicDefense: 0
-    Initiative: 0
     MoveRange: 0
     StatusResist: 0
     CritChance: 0
+    SupportPower: 0
+    Potency: 0
+    HealingReceived: 0
+    MpRegen: 0
   _statuses: []
   _silenceable: 0
   _cleanses: 
   _pushDistance: 0
+  _pushMode: 0
+  _slamDamagePerTile: 3
   _swapWithCaster: 0
   _summonTriggerMode: 0
   _auraRadius: 0
@@ -50,17 +61,31 @@ MonoBehaviour:
   _areaRadius: 0
   _cooldownTurns: 0
   _mpCost: 0
+  _actionCost: 1
+  _ignoreEnemies: 0
+  _ignoreAllies: 0
   _visuals:
+    WindUp: 2
     Lunge: 1
-    WindUpSeconds: 0.3
-    MeleeEffectPrefab: {fileID: 8307060409358143758, guid: 8f767d0b23c8e3b4cb2ead5380b1074d, type: 3}
-    MeleeEffectOffsetTiles: 0.6
+    WindUpSeconds: 0.2
+    GatherEffectPrefab: {fileID: 0}
+    GatherOffsetTiles: 0
+    MeleeEffectPrefab: {fileID: 8992891539873926273, guid: 5896ed88c25b64f4795cb7902ec2cefc, type: 3}
+    MeleeEffectOffsetTiles: 0.5
     ProjectilePrefab: {fileID: 0}
     ProjectileTilesPerSecond: 14
+    ProjectileFadeSeconds: 1
     ImpactEffectPrefab: {fileID: 0}
     OrientImpactToAttack: 1
+    ImpactMatchesRecoil: 1
     AreaEffectPrefab: {fileID: 0}
     AreaEffectOnEveryTile: 0
     EffectLifetime: 2
-    ImpactHoldSeconds: 0.35
+    ImpactHoldSeconds: 0.4
+    HitSounds: []
+    HitVolume: 0.8
+    HitStopSeconds: 0.06
+    ShakeStrengthTiles: 0.06
+    ShakeSeconds: 0.2
+    RecoilTiles: 0.2
     HazardEffectPrefab: {fileID: 0}

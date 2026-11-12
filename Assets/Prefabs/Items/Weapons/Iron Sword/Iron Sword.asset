@@ -13,8 +13,26 @@ MonoBehaviour:
   m_Name: Iron Sword
   m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.WeaponSO
   _weaponName: Iron Sword
-  _id: 0
+  _group: 0
+  _hands: 0
+  _requirements: []
   _requiredStat: 0
   _requiredStatValue: 4
+  _passiveBonus:
+    Hp: 0
+    Mp: 0
+    PhysicalAttack: 0
+    PhysicalDefense: 0
+    MagicAttack: 0
+    MagicDefense: 0
+    MoveRange: 0
+    StatusResist: 0
+    CritChance: 0
+    SupportPower: 0
+    Potency: 0
+    HealingReceived: 0
+    MpRegen: 0
   _abilities:
   - {fileID: 11400000, guid: 64cbc98af4b245b4495602a2103c1f04, type: 2}
+  - {fileID: 11400000, guid: bcb820f0d05259441ab69b068301fdef, type: 2}
+  _dropsOnDeath: 1
