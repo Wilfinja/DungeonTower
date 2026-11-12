@@ -265,6 +265,7 @@ namespace DungeonTower.UI
                 case AttackShape.Cross: return $"Area: cross, reach {r}";
                 case AttackShape.Line: return $"Area: line, size {r}";
                 case AttackShape.Cone: return $"Area: cone, size {r}";
+                case AttackShape.Sweep: return $"Area: sweep, reach {r} each side";
                 case AttackShape.Chain:
                     return $"Chain: hits the target, then jumps up to {r} more time{(r == 1 ? "" : "s")} "
                          + $"(up to {ability.Range} tiles each)";

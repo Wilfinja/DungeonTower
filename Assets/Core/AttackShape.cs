@@ -21,6 +21,7 @@ namespace DungeonTower.Core
         Cone,
         Ring,
         Cross,
-        Chain
+        Chain,
+        Sweep
     }
 }

@@ -41,6 +41,8 @@ namespace DungeonTower.Core
                     return RingTiles(impactTile, areaRadius);
                 case AttackShape.Cross:
                     return CrossTiles(impactTile, areaRadius);
+                case AttackShape.Sweep:
+                    return SweepTiles(casterPosition, impactTile, areaRadius);
                 default: // Single, Chain
                     return new List<GridPosition> { impactTile };
             }
@@ -136,6 +138,18 @@ namespace DungeonTower.Core
             return Math.Abs(dx) >= Math.Abs(dy)
                 ? (Math.Sign(dx) == 0 ? 1 : Math.Sign(dx), 0)
                 : (0, Math.Sign(dy));
+        }
+
+        private static List<GridPosition> SweepTiles(GridPosition caster, GridPosition aimedAt, int reach)
+        {
+            var (dx, dy) = CardinalDirection(caster, aimedAt);
+            int perpX = dy != 0 ? 1 : 0;
+            int perpY = dx != 0 ? 1 : 0;
+
+            var tiles = new List<GridPosition>();
+            for (int i = -reach; i <= reach; i++)
+                tiles.Add(new GridPosition(aimedAt.X + perpX * i, aimedAt.Y + perpY * i));
+            return tiles;
         }
     }
 }
