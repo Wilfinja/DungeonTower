@@ -25,6 +25,14 @@ namespace DungeonTower.Core
         }
 
         /// <summary>
+        /// Range 0 means Self: the caster's own tile is the only legal aim
+        /// point. Area shapes still spread out from there (a Blast with
+        /// radius 2 is a nova around the caster). Not meaningful for Summon
+        /// (needs an empty tile) or for Line/Cone/Sweep (need a direction).
+        /// </summary>
+        public static bool IsSelfCast(IAbility ability) => ability.Range <= 0;
+
+        /// <summary>
         /// True if `ability` may affect a unit on the caster's side
         /// (sameSide, the caster included) or on the other side.
         /// </summary>
