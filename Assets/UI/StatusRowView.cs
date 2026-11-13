@@ -26,6 +26,7 @@ namespace DungeonTower.UI
 
         private readonly List<StatusIconView> _icons = new List<StatusIconView>();
         private bool _hasDrawn;
+        private CombatUnit _unit;
         private int _lastSignature;
 
         private void Awake()
@@ -44,6 +45,8 @@ namespace DungeonTower.UI
                 return;
             }
 
+            _unit = unit;
+
             var active = unit.Status.Active;
             int shown = Mathf.Min(active.Count, _maxIcons);
             int signature = ComputeSignature(active, shown);
@@ -55,8 +58,32 @@ namespace DungeonTower.UI
             _hasDrawn = true;
         }
 
+        /// <summary>
+        /// Which status icon (if any) is under this screen point? Used by
+        /// right-click inspect. The icons deliberately aren't raycast
+        /// targets (they must never eat grid clicks), so this checks their
+        /// rectangles directly instead of going through the EventSystem.
+        /// </summary>
+        public bool TryGetStatusAt(Vector2 screenPoint, Camera uiCamera, out CombatUnit unit, out StatusEffectId id)
+        {
+            unit = _unit;
+            id = default;
+            if (!_hasDrawn || _unit == null) return false;
+
+            foreach (var icon in _icons)
+            {
+                if (icon == null || !icon.gameObject.activeInHierarchy) continue;
+                if (!RectTransformUtility.RectangleContainsScreenPoint((RectTransform)icon.transform, screenPoint, uiCamera))
+                    continue;
+                id = icon.Id;
+                return true;
+            }
+            return false;
+        }
+
         private void Hide()
         {
+            _unit = null;
             if (!_hasDrawn) return;
             foreach (var icon in _icons)
                 if (icon != null) icon.gameObject.SetActive(false);
@@ -82,7 +109,7 @@ namespace DungeonTower.UI
                 var instance = active[i];
                 var rule = StatusRules.Get(instance.Id);
                 var visual = _visuals.Get(instance.Id);
-                icon.Bind(visual, _visuals.BorderColor(rule.Polarity), ResolveCount(instance, rule, visual.CountMode));
+                icon.Bind(instance.Id, visual, _visuals.BorderColor(rule.Polarity), ResolveCount(instance, rule, visual.CountMode));
                 icon.gameObject.SetActive(true);
             }
 
