@@ -1678,6 +1678,10 @@ namespace DungeonTower.UI
             if (ability.EffectKind == EffectKind.Summon)
                 return GetSummonTargetTiles(unit, ability);
 
+            // Range 0 = Self: the caster's own tile is the only thing to aim at.
+            if (AbilityTargeting.IsSelfCast(ability))
+                return new List<GridPosition> { unit.Position };
+
             if (ability.AreaShape == AttackShape.Single || ability.AreaShape == AttackShape.Chain)
                 return GetSingleTargetTiles(unit, ability);
 
@@ -1870,7 +1874,7 @@ namespace DungeonTower.UI
                 {
                     sb.Append("\n- ").Append(ability.Name).Append(" (")
                       .Append(ability.ActionCost).Append(ability.ActionCost == 1 ? " action" : " actions")
-                      .Append(", range ").Append(ability.Range).Append(')');
+                      .Append(AbilityTargeting.IsSelfCast(ability) ? ", self)" : ", range " + ability.Range + ")");
                 }
             }
             return sb.ToString();
@@ -2375,6 +2379,7 @@ namespace DungeonTower.UI
             foreach (var a in enemy.WeaponAbilities)
             {
                 if (AbilityTargeting.TargetsAllies(a)) continue;
+                if (AbilityTargeting.IsSelfCast(a)) continue;   // enemies don't use self-cast abilities yet
                 if (enemy.IsOnCooldown(a) || plan.UsedCooldowns.Contains(a)) continue;
                 if (SilenceRules.IsBlocked(enemy, a, AbilitySource.Weapon)) continue;
                 if (a.MpCost > plan.Mp) continue;
@@ -2640,6 +2645,7 @@ namespace DungeonTower.UI
                 if (SilenceRules.IsBlocked(enemy, candidate, AbilitySource.Weapon)) continue;
                 if (!enemy.CanAfford(candidate)) continue;
                 if (!AbilityTargeting.TargetsAllies(candidate)) continue;
+                if (AbilityTargeting.IsSelfCast(candidate)) continue;   // enemies don't use self-cast abilities yet
 
                 var needy = allies.Where(a => SupportNeed.Needs(a, candidate, enemy.SupportHealThreshold)).ToList();
                 if (needy.Count == 0) continue;
