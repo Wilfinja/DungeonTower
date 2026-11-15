@@ -1337,6 +1337,9 @@ namespace DungeonTower.UI
         // the push/pull/swap resolution below.
         private void ResolveBattlefieldEntry(CombatUnit unit, GridPosition position)
         {
+            // A following aura goes wherever its owner goes.
+            _battlefieldObjects.MoveFollowers(unit);
+
             // Stepping onto a closed door opens it for good. The fog refresh
             // at the bottom of this method then reveals the far side.
             if (_map.TryOpenDoor(position))
@@ -1693,7 +1696,9 @@ namespace DungeonTower.UI
         // wall, Blast/Ring/Cross for a cloud), exactly like a Damage
         // ability's footprint already works.
         private List<GridPosition> GetSummonTargetTiles(CombatUnit unit, IAbility ability)
-            => GridRange.Within(unit.Position, ability.Range)
+            => ability.SummonFollowsOwner
+                ? new List<GridPosition> { unit.Position }   // a following aura always goes on the caster
+                : GridRange.Within(unit.Position, ability.Range)
                 .Where(pos => InBounds(pos) && _movementMap.IsWalkable(pos) && FindLivingUnitAt(pos) == null
                     && LineOfSight.HasClearPath(unit.Position, pos, _sightMap))
                 .ToList();
@@ -3080,12 +3085,23 @@ namespace DungeonTower.UI
 
         private void SpawnBattlefieldObject(CombatUnit caster, IAbility ability, GridPosition anchorTile)
         {
+            bool follows = ability.SummonFollowsOwner;
+            if (follows)
+            {
+                anchorTile = caster.Position;
+                _battlefieldObjects.RemoveFollowing(caster, ability.Name);   // recast replaces, never stacks
+            }
+
             var tiles = AreaOfEffect.GetAffectedTiles(caster.Position, anchorTile, ability.AreaShape, ability.AreaRadius);
             var obj = new BattlefieldObject
             {
                 Name = ability.Name,
                 OwnerFaction = caster.Faction,
-                OwnerUnit = ability.EndsIfOwnerMoves ? caster : null,
+                OwnerUnit = (ability.EndsIfOwnerMoves || follows) ? caster : null,
+                FollowsOwner = follows,
+                FollowOffsets = follows
+                    ? tiles.Select(t => new GridPosition(t.X - caster.Position.X, t.Y - caster.Position.Y)).ToList()
+                    : null,
                 Tiles = tiles,
                 RemainingDuration = ability.SummonDuration > 0 ? ability.SummonDuration : int.MaxValue,
                 MaxHp = ability.SummonMaxHp > 0 ? ability.SummonMaxHp : (int?)null,
@@ -3167,7 +3183,15 @@ namespace DungeonTower.UI
 
             foreach (var obj in _battlefieldObjects.Visible)
             {
-                if (_battlefieldViews.ContainsKey(obj)) continue;
+                if (_battlefieldViews.TryGetValue(obj, out var existing))
+                {
+                    // A following aura keeps its markers but slides them to the owner's new tiles.
+                    if (obj.FollowsOwner && existing.Count == obj.Tiles.Count)
+                        for (int i = 0; i < existing.Count; i++)
+                            if (existing[i] != null)
+                                existing[i].transform.position = GridToWorld.ToWorldPosition(obj.Tiles[i]);
+                    continue;
+                }
 
                 // A per-ability hazard effect wins over the generic marker.
                 var prefab = _hazardPrefabs.TryGetValue(obj, out var hazard) && hazard != null
@@ -3284,7 +3308,7 @@ namespace DungeonTower.UI
         {
             Debug.Log($"{unit.DisplayName} has fallen.");
 
-            foreach (var ended in _battlefieldObjects.RemoveOwnedByMovement(unit))
+            foreach (var ended in _battlefieldObjects.RemoveAllOwnedBy(unit))
                 Debug.Log($"{unit.DisplayName}'s {ended.Name} fades as they fall.");
 
             // A natural weapon/armor (claws, thick hide, etc.) never
