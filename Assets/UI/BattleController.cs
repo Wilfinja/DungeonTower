@@ -1698,9 +1698,16 @@ namespace DungeonTower.UI
         private List<GridPosition> GetSummonTargetTiles(CombatUnit unit, IAbility ability)
             => ability.SummonFollowsOwner
                 ? new List<GridPosition> { unit.Position }   // a following aura always goes on the caster
-                : GridRange.Within(unit.Position, ability.Range)
+                : SummonCandidateTiles(unit.Position, ability);
+
+        // Every tile a non-following summon could be placed on from `from`:
+        // empty, walkable, in range, in line of sight, and not a tile some
+        // enemy is already about to walk onto.
+        private List<GridPosition> SummonCandidateTiles(GridPosition from, IAbility ability)
+            => GridRange.Within(from, ability.Range)
                 .Where(pos => InBounds(pos) && _movementMap.IsWalkable(pos) && FindLivingUnitAt(pos) == null
-                    && LineOfSight.HasClearPath(unit.Position, pos, _sightMap))
+                    && !_swarmReserved.ContainsValue(pos)
+                    && LineOfSight.HasClearPath(from, pos, _sightMap))
                 .ToList();
 
         // Damage targets enemies; Heal/Buff target allies (the caster's
@@ -2185,6 +2192,10 @@ namespace DungeonTower.UI
             // pack saw (PickSearchAnchor, a longer/looser window than
             // chasing), and finally to plain idle roaming once even
             // that's gone cold - the trail is genuinely lost.
+            // 1b. Summons: a totem, trap, cloud or aura, if one is worth an action
+            // right now. Plays out with the rest of the swarm.
+            PlanSummon(enemy, plan);
+
             var forced = TauntRules.GetForcedTarget(enemy);
             if (forced != null)
             {
@@ -2360,6 +2371,103 @@ namespace DungeonTower.UI
                 bool again = ability.CooldownTurns <= 0 && (ability.MpCost <= 0 || plan.Mp >= ability.MpCost);
                 if (!again) ability = null;
             }
+        }
+
+        // ---- Enemy summons ------------------------------------------------
+        // At most one summon per enemy per turn, chosen by EnemySummonPlanner
+        // (where it would do the most good, and whether that's worth an
+        // action). The same summon isn't recast while one is still standing
+        // (one per side per ability, or one per caster for a following aura).
+        // A placed summon (not a self-anchored aura) pins the enemy in place
+        // for the turn, since its range was checked from where it stands.
+        private void PlanSummon(CombatUnit enemy, EnemyPlan plan)
+        {
+            const int Half = ActionPoints.HalfPerAction;
+
+            bool anySummon = false;
+            foreach (var a in enemy.WeaponAbilities)
+                if (a.EffectKind == EffectKind.Summon) { anySummon = true; break; }
+            if (!anySummon) return;
+
+            var hostiles = KnownHostilePositions(enemy);
+            if (hostiles.Count == 0) return;
+
+            var allies = _unitViews.Keys
+                .Where(u => u.IsAlive && u.Faction == enemy.Faction)
+                .Select(u => u == enemy ? plan.From : (_swarmReserved.TryGetValue(u, out var dest) ? dest : u.Position))
+                .ToList();
+
+            IAbility bestAbility = null;
+            var bestTile = plan.From;
+            float bestScore = 0f;
+
+            foreach (var a in enemy.WeaponAbilities)
+            {
+                if (a.EffectKind != EffectKind.Summon) continue;
+                if (enemy.IsOnCooldown(a) || plan.UsedCooldowns.Contains(a)) continue;
+                if (SilenceRules.IsBlocked(enemy, a, AbilitySource.Weapon)) continue;
+                if (a.MpCost > plan.Mp || a.ActionCost * Half > plan.Budget) continue;
+                if (SummonAlreadyActive(enemy, a)) continue;
+
+                var candidates = a.SummonFollowsOwner
+                    ? new List<GridPosition> { plan.From }
+                    : SummonCandidateTiles(plan.From, a);
+                if (!EnemySummonPlanner.TryChooseAnchor(a, plan.From, candidates, hostiles, allies, out var tile, out var score))
+                    continue;
+
+                score += 1000f * a.AiPriority;
+                if (score > bestScore)
+                {
+                    bestAbility = a;
+                    bestTile = tile;
+                    bestScore = score;
+                }
+            }
+
+            if (bestAbility == null) return;
+
+            _swarmAttacks.Add((enemy, EnemySummon(enemy, bestAbility, bestTile)));
+            plan.Budget -= bestAbility.ActionCost * Half;
+            plan.Mp -= bestAbility.MpCost;
+            if (bestAbility.CooldownTurns > 0) plan.UsedCooldowns.Add(bestAbility);
+            if (!bestAbility.SummonFollowsOwner) plan.MovePlanned = true;
+        }
+
+        private bool SummonAlreadyActive(CombatUnit enemy, IAbility ability)
+            => _battlefieldObjects.Active.Any(o => o.Name == ability.Name
+                && (ability.SummonFollowsOwner ? o.OwnerUnit == enemy : o.OwnerFaction == enemy.Faction));
+
+        // Where this enemy's side believes the opposing units are: live if
+        // currently sensed, otherwise the freshest remembered sighting.
+        private List<GridPosition> KnownHostilePositions(CombatUnit enemy)
+        {
+            var result = new List<GridPosition>();
+            foreach (var u in _unitViews.Keys.Where(u => u.IsAlive && u.Faction != enemy.Faction))
+            {
+                if (enemy.CanSense(u.Position, _sightMap)) { result.Add(u.Position); continue; }
+                var remembered = enemy.Memory.Get(u, _battle.RoundNumber, MemoryMaxAgeRounds);
+                if (remembered.HasValue) result.Add(remembered.Value);
+            }
+            return result;
+        }
+
+        // One queued enemy summon, re-checked when its turn in the swarm
+        // comes: the enemy may be dead, silenced, out of MP, or the tile
+        // may have been taken since it was planned. Skipped casts don't happen.
+        private IEnumerator EnemySummon(CombatUnit enemy, IAbility ability, GridPosition tile)
+        {
+            if (!enemy.IsAlive) yield break;
+            if (enemy.IsOnCooldown(ability) || !enemy.CanAfford(ability)) yield break;
+            if (SilenceRules.IsBlocked(enemy, ability, AbilitySource.Weapon)) yield break;
+
+            if (ability.SummonFollowsOwner)
+                tile = enemy.Position;
+            else if (FindLivingUnitAt(tile) != null || !_movementMap.IsWalkable(tile)
+                || !enemy.Position.IsWithinRange(tile, ability.Range)
+                || !LineOfSight.HasClearPath(enemy.Position, tile, _sightMap))
+                yield break;
+
+            yield return StartCoroutine(PerformAbility(enemy, ability, tile));
         }
 
         // The score an enemy gives each usable attack: expected power (its
