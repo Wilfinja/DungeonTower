@@ -126,7 +126,7 @@ namespace DungeonTower.UI
             _savedTimeScale = Time.timeScale > 0f ? Time.timeScale : 1f;
             Time.timeScale = 0f;
             yield return new WaitForSecondsRealtime(seconds);
-            Time.timeScale = _savedTimeScale;
+            if (!GamePause.IsPaused) Time.timeScale = _savedTimeScale;   // a pause that began mid-stop stays frozen
             _stopping = false;
         }
 
@@ -135,7 +135,7 @@ namespace DungeonTower.UI
         {
             if (_stopping)
             {
-                Time.timeScale = _savedTimeScale;
+                if (!GamePause.IsPaused) Time.timeScale = _savedTimeScale;
                 _stopping = false;
             }
         }
@@ -147,7 +147,7 @@ namespace DungeonTower.UI
             if (clip == null) return;
 
             _audio.pitch = Random.Range(0.92f, 1.08f) * (big ? 0.92f : 1f);   // heavier hits sound lower
-            _audio.PlayOneShot(clip, Mathf.Clamp01(v.HitVolume * (big ? 1.25f : 1f)));
+            _audio.PlayOneShot(clip, Mathf.Clamp01(v.HitVolume * (big ? 1.25f : 1f) * GameSettings.SfxVolume));
         }
 
         // ---- floating text -------------------------------------------------

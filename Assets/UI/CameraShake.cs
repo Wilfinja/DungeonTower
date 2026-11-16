@@ -23,6 +23,7 @@ namespace DungeonTower.UI
         /// <summary>Starts a shake. A weaker shake never cuts off a stronger one in progress.</summary>
         public void Shake(float strengthWorldUnits, float seconds)
         {
+            if (!GameSettings.ScreenShake) return;
             if (strengthWorldUnits <= 0f || seconds <= 0f) return;
             if (_elapsed < _duration && strengthWorldUnits < CurrentStrength()) return;
 

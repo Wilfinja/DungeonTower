@@ -1791,6 +1791,7 @@ namespace DungeonTower.UI
 
         private void Update()
         {
+            if (GamePause.IsPaused) return;   // pause menu is open: no clicks or hotkeys reach the grid
             if (_endTurnPending) return;
 
             if (_battle == null || _battle.Outcome != BattleOutcome.InProgress) return;
@@ -1844,6 +1845,8 @@ namespace DungeonTower.UI
             {
                 _inspecting = false;
                 if (TooltipView.Instance != null) TooltipView.Instance.Hide();
+                if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+                    PauseMenuView.MarkEscapeHandled();   // Escape just closed the tooltip, so don't also open the pause menu
             }
             return false;
         }
@@ -1892,7 +1895,14 @@ namespace DungeonTower.UI
             bool escape = Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame;
             if (!rightClick && !escape) return;
 
-            if (_mode == ActionMode.Move) { ClearPathPreview(); return; }
+            // Escape that backs out of something is used up; Escape with nothing to back out of opens the pause menu.
+            if (_mode == ActionMode.Move)
+            {
+                if (escape && _pendingMoveTile.HasValue) PauseMenuView.MarkEscapeHandled();
+                ClearPathPreview();
+                return;
+            }
+            if (escape) PauseMenuView.MarkEscapeHandled();
             _pendingScroll = null;
             SetMode(ActionMode.Move);
         }
@@ -2054,7 +2064,7 @@ namespace DungeonTower.UI
             _gridView.SetDoorOpen(door, true);
             Debug.Log($"{enemy.DisplayName} opens a door.");
             RefreshFogOfWar();
-            yield return new WaitForSeconds(0.2f);
+            yield return new WaitForSeconds(GameSettings.CombatSeconds(0.2f));
         }
 
         private void ShowPathPreview(CombatUnit unit, GridPosition target)
@@ -3687,7 +3697,7 @@ namespace DungeonTower.UI
             }
 
             if (show && (visuals.ImpactEffectPrefab != null || visuals.AreaEffectPrefab != null))
-                yield return new WaitForSeconds(visuals.ImpactHoldSeconds);
+                yield return new WaitForSeconds(GameSettings.CombatSeconds(visuals.ImpactHoldSeconds));
 
             yield return StartCoroutine(PlayPendingPushes(attacker, ability));
         }
@@ -3705,6 +3715,7 @@ namespace DungeonTower.UI
         // ability fires.
         private IEnumerator PlayGather(AbilityVisuals v, Vector3 from, Vector3 to)
         {
+            if (GameSettings.FastCombat) yield break;   // Fast Combat skips the charge-up entirely
             float seconds = v.GatherSeconds;
             if (v.GatherEffectPrefab == null)
             {
@@ -3736,7 +3747,7 @@ namespace DungeonTower.UI
             var direction = to - from;
             if (direction.sqrMagnitude > 0.0001f) projectile.transform.rotation = FacingRotation(direction) * authored;
 
-            float speed = visuals.ProjectileTilesPerSecond * UnitView.TileWorldSize();
+            float speed = visuals.ProjectileTilesPerSecond * UnitView.TileWorldSize() * GameSettings.CombatSpeed;
             while (projectile != null && projectile.transform.position != to)
             {
                 projectile.transform.position = Vector3.MoveTowards(
