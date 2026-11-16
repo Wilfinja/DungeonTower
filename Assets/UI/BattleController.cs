@@ -529,8 +529,12 @@ namespace DungeonTower.UI
         // and HP/MP are filled AFTER (armor may add to the max).
         private CombatUnit BuildHero(HeroSetup setup, GridPosition position)
         {
-            var hero = new CombatUnit(setup.Name, Faction.Player,
-                NewHeroStats(setup.Body, setup.Mind, setup.Spirit), position, _playerVisionRadius);
+            // Hero types start at fixed stats; the old creation-point heroes (and the
+            // Default Party used when this scene is played alone) spend points on 3/3/3.
+            var startStats = setup.BaseStats.HasValue
+                ? new UnitStats(setup.BaseStats.Value)
+                : NewHeroStats(setup.Body, setup.Mind, setup.Spirit);
+            var hero = new CombatUnit(setup.Name, Faction.Player, startStats, position, _playerVisionRadius);
 
             if (setup.Weapon != null && !hero.TryEquip(setup.Weapon, HandSlot.Main, out _))
                 Debug.LogWarning($"{setup.Name} can't equip {setup.Weapon.Name} in the main hand.");
@@ -725,7 +729,7 @@ namespace DungeonTower.UI
             if (_battle.Outcome != BattleOutcome.InProgress)
             {
                 Debug.Log($"Battle over: {_battle.Outcome}");
-                if (_battle.Outcome == BattleOutcome.PlayerDefeat) RunState.Clear();
+                if (_battle.Outcome == BattleOutcome.PlayerDefeat) OnRunLost();
                 if (_descendButton != null) _descendButton.SetActive(false);
                 _abilityBar.Hide();
                 _inventoryPanel.Hide();
@@ -1421,6 +1425,7 @@ namespace DungeonTower.UI
             if (_endTurnPending || AnyUnitMoving()) return;
             if (!CanDescend()) return;
 
+            AwardFloorGems();
             RunState.CarryToNextFloor(_currentFloor + 1, _partyMembers.Where(u => u.IsAlive), _inventory);
             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
         }
@@ -3350,6 +3355,7 @@ namespace DungeonTower.UI
                 }
 
                 AwardExperience(unit, kit.XpReward, killer);
+                if (kit.Role == EnemyRole.Boss) AwardBossGems();
             }
 
             if (pile != null && !pile.IsEmpty)

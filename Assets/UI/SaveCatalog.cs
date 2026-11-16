@@ -25,7 +25,7 @@ namespace DungeonTower.UI
         private readonly Dictionary<string, EnemySO> _enemies = new Dictionary<string, EnemySO>();
         private readonly Dictionary<string, IAbility> _abilities = new Dictionary<string, IAbility>();
 
-        public static SaveCatalog Build(ThemeRegistry themes, StarterKitSO kit, IEnumerable<Object> extras)
+        public static SaveCatalog Build(ThemeRegistry themes, StarterKitSO kit, HeroTypeRegistrySO heroTypes, IEnumerable<Object> extras)
         {
             var catalog = new SaveCatalog();
 
@@ -52,6 +52,11 @@ namespace DungeonTower.UI
                 foreach (var e in kit.Potions) catalog.Add(e.Item);
                 foreach (var e in kit.Scrolls) catalog.Add(e.Item);
             }
+
+            if (heroTypes != null)
+                foreach (var type in heroTypes.Types)
+                    if (type != null)
+                        foreach (var asset in type.GearAssets()) catalog.Add(asset);
 
             if (extras != null)
                 foreach (var extra in extras) catalog.Add(extra);
