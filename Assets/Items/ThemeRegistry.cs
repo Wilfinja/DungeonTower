@@ -15,6 +15,9 @@ namespace DungeonTower.Items
     {
         [SerializeField] private List<DungeonThemeSO> _themes = new List<DungeonThemeSO>();
 
+        // Every theme, for the save system's item lookup.
+        public IReadOnlyList<DungeonThemeSO> Themes => _themes;
+
         public DungeonThemeSO GetThemeForFloor(int floor)
         {
             var matches = _themes.Where(t => t != null && t.CoversFloor(floor)).ToList();

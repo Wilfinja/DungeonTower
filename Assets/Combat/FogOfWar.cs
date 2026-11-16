@@ -31,6 +31,17 @@ namespace DungeonTower.Combat
         private HashSet<GridPosition> _currentlyVisible = new HashSet<GridPosition>();
 
         public bool IsExplored(GridPosition pos) => _explored.Contains(pos);
+
+        /// <summary>Every tile ever seen (save/load).</summary>
+        public IEnumerable<GridPosition> ExploredTiles => _explored;
+
+        /// <summary>Save/load: puts the explored tiles back. Call Recompute afterwards for what's visible now.</summary>
+        public void RestoreExplored(IEnumerable<GridPosition> tiles)
+        {
+            _explored.Clear();
+            if (tiles != null) _explored.UnionWith(tiles);
+            _currentlyVisible = new HashSet<GridPosition>();
+        }
         public bool IsCurrentlyVisible(GridPosition pos) => _currentlyVisible.Contains(pos);
 
         // Call after anything that could change what's visible: a

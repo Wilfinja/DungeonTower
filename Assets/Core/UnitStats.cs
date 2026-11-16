@@ -177,5 +177,21 @@ namespace DungeonTower.Core
         public void AddBonus(DerivedStatBonus bonus) => _consumableBonus += bonus;
 
         public void SetTemporaryBonus(DerivedStatBonus bonus) => _temporaryBonus = bonus;
+
+        // ---- Save/load only ------------------------------------------------
+        // Put a hero back exactly as saved. Body/Mind/Spirit come from the
+        // constructor; this restores the rest of the progress. Not for gameplay.
+        public DerivedStatBonus ConsumableBonus => _consumableBonus;
+
+        public void RestoreProgress(int level, int experience, int unspentPoints, DerivedStatBonus consumableBonus)
+        {
+            Level = Math.Max(1, level);
+            Experience = Math.Max(0, experience);
+            UnspentPoints = Math.Max(0, unspentPoints);
+            _consumableBonus = consumableBonus;
+        }
+
+        // No requirement check: the unit was already wearing it when it was saved.
+        public void RestoreArmor(IArmor armor) => EquippedArmor = armor;
     }
 }

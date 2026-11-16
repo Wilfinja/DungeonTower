@@ -44,6 +44,11 @@ namespace DungeonTower.Core
             if (weapon != null) _weapons.Add(weapon);
         }
 
+        public void AddArmor(IArmor armor)
+        {
+            if (armor != null) _armor.Add(armor);
+        }
+
         public void AddPotion(IPotion potion, int count = 1)
         {
             if (potion == null || count <= 0) return;

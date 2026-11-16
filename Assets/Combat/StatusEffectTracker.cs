@@ -150,6 +150,23 @@ namespace DungeonTower.Combat
         private static int CapStacks(StatusRule rule, int stacks)
             => rule.MaxStacks > 0 ? Math.Min(stacks, rule.MaxStacks) : stacks;
 
+        // --- Save/load ---
+
+        /// <summary>Puts one saved status straight back, bypassing chance rolls and stacking rules.</summary>
+        public void RestoreInstance(StatusEffectId id, int stacks, int duration, float magnitude,
+            DerivedStatBonus statBonus, CombatUnit source, bool primed, bool skipNextDurationTick)
+        {
+            var instance = new StatusEffectInstance(id, stacks, duration, magnitude, statBonus, source)
+            {
+                Primed = primed,
+                SkipNextDurationTick = skipNextDurationTick
+            };
+            _active[id] = instance;
+            RefreshBonuses();
+        }
+
+        public void RestoreOwnersTurn(bool isOwnersTurn) => IsOwnersTurn = isOwnersTurn;
+
         // --- Removal ---
 
         public bool Remove(StatusEffectId id)

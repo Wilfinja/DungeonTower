@@ -39,7 +39,7 @@ namespace DungeonTower.Combat
         // True when applied during the owner's own turn to a status whose
         // duration ticks at turn END — without this, a self-buff would
         // lose a turn of duration before the owner ever benefits from it.
-        internal bool SkipNextDurationTick { get; set; }
+        public bool SkipNextDurationTick { get; internal set; }
 
         public DerivedStatBonus EffectiveBonus => StatBonus.Scaled(Stacks);
 

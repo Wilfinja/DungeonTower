@@ -95,6 +95,14 @@ namespace DungeonTower.Combat
         public int GetRemainingCooldown(IAbility ability)
             => ability != null && _cooldowns.TryGetValue(ability, out var remaining) ? remaining : 0;
 
+        // Save/load: every ability still cooling down, and putting one back.
+        public IEnumerable<KeyValuePair<IAbility, int>> Cooldowns => _cooldowns;
+
+        public void RestoreCooldown(IAbility ability, int remainingTurns)
+        {
+            if (ability != null && remainingTurns > 0) _cooldowns[ability] = remainingTurns;
+        }
+
         // Called once, right when the ability is actually used.
         public void TriggerCooldown(IAbility ability)
         {
@@ -302,6 +310,18 @@ namespace DungeonTower.Combat
         // the fractional part carries to the next turn, so every Spirit
         // point counts. Returns MP actually gained.
         private float _mpRegenCarry;
+
+        public float MpRegenCarry => _mpRegenCarry;
+
+        // Save/load only: puts HP, MP and the alert flag back as saved. Call
+        // AFTER statuses are restored, since they can change the max HP/MP.
+        public void RestoreRuntime(int hp, int mp, float mpRegenCarry, bool alerted)
+        {
+            CurrentHp = Math.Max(0, Math.Min(hp, Stats.MaxHp));
+            CurrentMp = Math.Max(0, Math.Min(mp, Stats.MaxMp));
+            _mpRegenCarry = mpRegenCarry;
+            IsAlerted = alerted;
+        }
 
         public int RegenMp()
         {

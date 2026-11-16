@@ -32,7 +32,7 @@ namespace DungeonTower.UI
     /// detection radius (LOS-clipped) so the player can see where it's
     /// safe to approach.
     /// </summary>
-    public sealed class BattleController : MonoBehaviour
+    public sealed partial class BattleController : MonoBehaviour
     {
         [SerializeField] private GridView _gridView;
         [SerializeField] private UnitView _unitViewPrefab;
@@ -306,6 +306,14 @@ namespace DungeonTower.UI
 
         private void Start()
         {
+            // Saving is only offered once the pause menu knows how (see BattleController.Save.cs).
+            if (_pauseMenu != null) _pauseMenu.ConfigureSaving(CanSaveNow, SaveGame);
+
+            // Continuing a saved game rebuilds the floor from the save instead of generating one.
+            var pendingSave = SaveService.PendingLoad;
+            SaveService.PendingLoad = null;
+            if (pendingSave != null && TryStartFromSave(pendingSave)) return;
+
             bool continuing = RunState.IsActive;
             if (continuing) _currentFloor = RunState.Floor;
 
@@ -324,7 +332,26 @@ namespace DungeonTower.UI
             _inventoryPanel.Hide();
 
             var units = continuing ? BuildNextFloorRoster(dungeon) : BuildStartingRoster(dungeon);
-            _partyMembers = units.Where(u => u.Faction == Faction.Player).ToList();
+            BindPartyPanels(units.Where(u => u.Faction == Faction.Player).ToList());
+
+            foreach (var unit in units)
+                SpawnUnitView(unit);
+
+            PlaceThemeChests(dungeon, units);
+
+            _heroPhaseRound = -1;
+            _lastTickedRound = -1;
+            _battle = new Battle(units) { EndOnEnemiesDefeated = false };
+            _battle.Start();
+            RefreshFogOfWar();
+            BeginTurn();
+        }
+
+        // Hands the party to every panel that shows it (inventory, character
+        // sheet, level-up badge, HUD). Shared by a new floor and a loaded save.
+        private void BindPartyPanels(List<CombatUnit> party)
+        {
+            _partyMembers = party;
             _inventoryPanel.SetPartyMembers(_partyMembers);
             if (_characterSheet != null)
             {
@@ -339,18 +366,6 @@ namespace DungeonTower.UI
                 _partyHud.HeroClicked -= SelectHero;
                 _partyHud.HeroClicked += SelectHero;
             }
-
-            foreach (var unit in units)
-                SpawnUnitView(unit);
-
-            PlaceThemeChests(dungeon, units);
-
-            _heroPhaseRound = -1;
-            _lastTickedRound = -1;
-            _battle = new Battle(units) { EndOnEnemiesDefeated = false };
-            _battle.Start();
-            RefreshFogOfWar();
-            BeginTurn();
         }
 
         // ---- Themed chests ------------------------------------------------
@@ -614,6 +629,13 @@ namespace DungeonTower.UI
 
             if (enemySO.Role == EnemyRole.Boss) _bossesSpawnedThisFloor++;
 
+            return CreateEnemyUnit(enemySO, position);
+        }
+
+        // One enemy built from its EnemySO, registered with its kit. Shared by
+        // normal spawning and by loading a save.
+        private CombatUnit CreateEnemyUnit(EnemySO enemySO, GridPosition position)
+        {
             var unit = new CombatUnit(enemySO.DisplayName, Faction.Enemy,
     new UnitStats(enemySO.Stats), position,
     enemySO.DetectionRadius, enemySO.AlertRadius,
@@ -3094,6 +3116,7 @@ namespace DungeonTower.UI
             var obj = new BattlefieldObject
             {
                 Name = ability.Name,
+                SourceAbilityName = ability.Name,
                 OwnerFaction = caster.Faction,
                 OwnerUnit = ability.EndsIfOwnerMoves ? caster : null,
                 Tiles = tiles,
