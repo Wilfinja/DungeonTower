@@ -199,6 +199,7 @@ namespace DungeonTower.UI
         {
             if (!CanLoadTitle()) return;
             RunState.Clear();
+            SaveService.Delete();   // the run is over, so there's nothing to continue
             GoToTitle();
         }
 

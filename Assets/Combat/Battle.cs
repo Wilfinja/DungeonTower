@@ -67,6 +67,20 @@ namespace DungeonTower.Combat
             Finish();
         }
 
+        /// <summary>
+        /// Save/load: resumes in the middle of a hero phase, in the given round,
+        /// with `selectedHero` (or the first living hero) as the acting hero.
+        /// Use instead of Start().
+        /// </summary>
+        public void RestoreHeroPhase(int roundNumber, CombatUnit selectedHero)
+        {
+            RoundNumber = Math.Max(1, roundNumber);
+            Phase = TurnPhase.Hero;
+            _enemyQueue.Clear();
+            CurrentUnit = selectedHero != null && selectedHero.IsAlive ? selectedHero : FirstLivingHero();
+            Finish();
+        }
+
         /// <summary>Hero phase only: makes `hero` the acting hero. False if that isn't allowed.</summary>
         public bool TrySelectHero(CombatUnit hero)
         {

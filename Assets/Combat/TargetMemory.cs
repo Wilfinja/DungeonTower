@@ -38,6 +38,16 @@ namespace DungeonTower.Combat
 
         public void Forget(CombatUnit target) => _sightings.Remove(target);
 
+        /// <summary>Every remembered sighting (save/load).</summary>
+        public IEnumerable<(CombatUnit Target, GridPosition Position, int Round)> Entries
+        {
+            get
+            {
+                foreach (var pair in _sightings)
+                    yield return (pair.Key, pair.Value.Position, pair.Value.Round);
+            }
+        }
+
         public void Clear() => _sightings.Clear();
     }
 }

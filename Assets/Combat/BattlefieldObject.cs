@@ -15,6 +15,10 @@ namespace DungeonTower.Combat
     {
         public string Name;
 
+        // Which ability placed it, so a saved game can find the hazard
+        // visuals again. Empty for anything made some other way.
+        public string SourceAbilityName;
+
         // Whoever placed it, and the faction that owns it. OwnerUnit is
         // non-null only when EndsIfOwnerMoves is true (Aura) — for an
         // independent object (Totem/Trap/Wall/Cloud) it's null even

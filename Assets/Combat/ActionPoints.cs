@@ -45,6 +45,19 @@ namespace DungeonTower.Combat
 
         public bool CanSpendActions(int actions) => CanSpend(actions * HalfPerAction);
 
+        /// <summary>Half-steps banked for the next phase (save/load reads this).</summary>
+        public int Carry => _carry;
+
+        /// <summary>Save/load only: puts the pool back exactly as saved.</summary>
+        public void Restore(int baseActions, int carry, int remaining, int banked, bool isDone)
+        {
+            BaseActionsPerPhase = Math.Max(1, baseActions);
+            _carry = Math.Max(0, carry);
+            Remaining = Math.Max(0, remaining);
+            Banked = Math.Max(0, banked);
+            IsDone = isDone;
+        }
+
         /// <summary>Start of the hero's phase. bonusActions is +1 for Haste, -1 for Slow, etc.</summary>
         public void BeginPhase(int bonusActions = 0)
         {
