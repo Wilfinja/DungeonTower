@@ -15,6 +15,11 @@ namespace DungeonTower.Core
         public int Body { get; set; }
         public int Mind { get; set; }
         public int Spirit { get; set; }
+
+        // Absolute starting stats, for heroes that come from a hero type
+        // (Warrior, Barbarian...). When set, Body/Mind/Spirit above are
+        // ignored; when null, they are creation points on top of 3/3/3.
+        public StatBlock? BaseStats { get; set; }
         public IWeapon Weapon { get; set; }     // main hand
         public IWeapon OffHand { get; set; }
         public IArmor Armor { get; set; }

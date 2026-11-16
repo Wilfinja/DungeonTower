@@ -3,13 +3,14 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 namespace DungeonTower.UI
 {
     /// <summary>
     /// The in-game pause menu: Resume, Save, Options, Save and Quit to
-    /// Title, Abandon Run and Quit to Desktop. Escape opens and closes it.
+    /// Town, Abandon Run and Quit to Desktop. Escape opens and closes it.
     ///
     /// Escape belongs to the game first: if it just backed out of aiming,
     /// dismissed a tooltip or cleared a path preview, BattleController
@@ -44,8 +45,9 @@ namespace DungeonTower.UI
         [Tooltip("Optional. Shows 'Game saved.' or why saving isn't allowed right now.")]
         [SerializeField] private TextMeshProUGUI _statusLabel;
 
-        [Tooltip("Exact name of the title scene (must be in Build Settings).")]
-        [SerializeField] private string _titleSceneName = "Title";
+        [Tooltip("Exact name of the town scene (must be in Build Settings).")]
+        [FormerlySerializedAs("_townSceneName")]
+        [SerializeField] private string _townSceneName = "Town";
 
         private static int _escapeHandledFrame = -1;
 
@@ -185,7 +187,7 @@ namespace DungeonTower.UI
 
         private void SaveAndQuitClicked()
         {
-            if (TrySave()) GoToTitle();
+            if (TrySave()) GoToTown();
         }
 
         private void SetStatus(string text)
@@ -197,25 +199,25 @@ namespace DungeonTower.UI
 
         private void AbandonRun()
         {
-            if (!CanLoadTitle()) return;
+            if (!CanLoadTown()) return;
             RunState.Clear();
-            SaveService.Delete();   // the run is over, so there's nothing to continue
-            GoToTitle();
+            SaveService.Delete();   // the run is over; the town's progress (profile.json) is untouched
+            GoToTown();
         }
 
-        private bool CanLoadTitle()
+        private bool CanLoadTown()
         {
-            if (Application.CanStreamedLevelBeLoaded(_titleSceneName)) return true;
-            Debug.LogError($"PauseMenuView: scene '{_titleSceneName}' can't be loaded; check the name and Build Settings.");
-            SetStatus("Can't reach the title screen. Check the Console.");
+            if (Application.CanStreamedLevelBeLoaded(_townSceneName)) return true;
+            Debug.LogError($"PauseMenuView: scene '{_townSceneName}' can't be loaded; check the name and Build Settings.");
+            SetStatus("Can't reach the town. Check the Console.");
             return false;
         }
 
-        private void GoToTitle()
+        private void GoToTown()
         {
-            if (!CanLoadTitle()) return;
+            if (!CanLoadTown()) return;
             GamePause.Set(false);
-            SceneManager.LoadScene(_titleSceneName);
+            SceneManager.LoadScene(_townSceneName);
         }
 
         private static void QuitToDesktop()

@@ -58,7 +58,7 @@ namespace DungeonTower.UI
                     extras.AddRange(hero.BeltScrolls);
                 }
 
-                _catalog = SaveCatalog.Build(_themeRegistry, _starterKit, extras);
+                _catalog = SaveCatalog.Build(_themeRegistry, _starterKit, _heroTypes, extras);
                 return _catalog;
             }
         }
