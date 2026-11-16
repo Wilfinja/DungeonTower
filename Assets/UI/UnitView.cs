@@ -58,7 +58,7 @@ namespace DungeonTower.UI
             float tileSize = TileWorldSize();
             var target = _waypoints.Peek();
             transform.position = Vector3.MoveTowards(
-                transform.position, target, tileSize * _tilesPerSecond * Time.deltaTime);
+                transform.position, target, tileSize * _tilesPerSecond * GameSettings.CombatSpeed * Time.deltaTime);
             if (transform.position == target) _waypoints.Dequeue();
         }
 
@@ -81,10 +81,10 @@ namespace DungeonTower.UI
             var dir = worldDirection.normalized;
             float tile = TileWorldSize();
 
-            yield return Slide(home, home - dir * tile * _pullBackTiles, windUpSeconds, true);            // pull back
+            yield return Slide(home, home - dir * tile * _pullBackTiles, GameSettings.CombatSeconds(windUpSeconds), true);            // pull back
             onSnap?.Invoke();
-            yield return Slide(transform.position, home + dir * tile * _lungeTiles, _snapSeconds, false); // snap
-            yield return Slide(transform.position, home, _returnSeconds, true);                           // settle
+            yield return Slide(transform.position, home + dir * tile * _lungeTiles, GameSettings.CombatSeconds(_snapSeconds), false); // snap
+            yield return Slide(transform.position, home, GameSettings.CombatSeconds(_returnSeconds), true);                           // settle
 
             transform.position = home;
             _attacking = false;
