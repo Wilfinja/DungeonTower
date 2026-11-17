@@ -183,6 +183,13 @@ namespace DungeonTower.Core
         // Trap, Wall, Cloud) means it's independent of any unit.
         bool EndsIfOwnerMoves { get; }
 
+        // True makes this a following aura: it's anchored on the caster
+        // when cast (no tile to aim at) and its footprint is recentered
+        // on them every time they move, instead of ending (see
+        // EndsIfOwnerMoves). It still ends if the caster dies or its
+        // SummonDuration runs out. Overrides EndsIfOwnerMoves.
+        bool SummonFollowsOwner { get; }
+
         // True blocks movement onto this object's footprint tiles
         // (impassable terrain, a solid Wall) — see the OnEntry note
         // above for why this and OnEntry rarely combine.

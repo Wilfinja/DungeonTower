@@ -69,9 +69,39 @@ namespace DungeonTower.Combat
         // Momentum's OnMoved hook fires, and again on death.
         public List<BattlefieldObject> RemoveOwnedByMovement(CombatUnit unit)
         {
+            // Following auras (FollowsOwner) survive a move; MoveFollowers carries them along.
+            var doomed = _objects.Where(o => o.OwnerUnit == unit && !o.FollowsOwner).ToList();
+            foreach (var obj in doomed) _objects.Remove(obj);
+            return doomed;
+        }
+
+        // Everything tied to `unit`, following auras included — for when
+        // the owner dies.
+        public List<BattlefieldObject> RemoveAllOwnedBy(CombatUnit unit)
+        {
             var doomed = _objects.Where(o => o.OwnerUnit == unit).ToList();
             foreach (var obj in doomed) _objects.Remove(obj);
             return doomed;
+        }
+
+        // Recenters every following aura owned by `unit` on where they
+        // stand now. Call after the unit's Position changes (a step, a
+        // push/pull, a swap).
+        public void MoveFollowers(CombatUnit unit)
+        {
+            foreach (var obj in _objects)
+            {
+                if (!obj.FollowsOwner || obj.OwnerUnit != unit || obj.FollowOffsets == null) continue;
+                obj.Tiles = obj.FollowOffsets
+                    .Select(o => new GridPosition(unit.Position.X + o.X, unit.Position.Y + o.Y))
+                    .ToList();
+            }
+        }
+
+        // Recasting a following aura replaces the old copy instead of stacking.
+        public void RemoveFollowing(CombatUnit owner, string name)
+        {
+            _objects.RemoveAll(o => o.FollowsOwner && o.OwnerUnit == owner && o.Name == name);
         }
 
         // Ticks every object's duration down by one round; returns the

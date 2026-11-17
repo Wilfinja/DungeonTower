@@ -309,7 +309,8 @@ namespace DungeonTower.UI
             if (ability.SummonBlocksLineOfSight) sb.Append("\nBlocks line of sight");
             if (ability.SummonDuration > 0) sb.Append($"\nLasts {ability.SummonDuration} round{(ability.SummonDuration == 1 ? "" : "s")}");
             if (ability.SummonMaxHp > 0) sb.Append($"\nCan be destroyed ({ability.SummonMaxHp} HP)");
-            if (ability.EndsIfOwnerMoves) sb.Append("\nEnds if the caster moves");
+            if (ability.SummonFollowsOwner) sb.Append("\nFollows the caster");
+            else if (ability.EndsIfOwnerMoves) sb.Append("\nEnds if the caster moves");
         }
 
         // "30% chance: Poison (2 stacks; damage each turn equal to stacks)"

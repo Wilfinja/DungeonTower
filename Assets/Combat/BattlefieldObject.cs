@@ -42,6 +42,12 @@ namespace DungeonTower.Combat
         public bool BlocksLineOfSight;
         public bool IsHidden;
 
+        // A following aura (see IAbility.SummonFollowsOwner): Tiles is
+        // recomputed as FollowOffsets (the footprint relative to the owner)
+        // + the owner's position every time the owner moves.
+        public bool FollowsOwner;
+        public IReadOnlyList<GridPosition> FollowOffsets;
+
         public SummonTriggerMode TriggerMode;
         public int AuraRadius;
         public bool AffectsAllies;

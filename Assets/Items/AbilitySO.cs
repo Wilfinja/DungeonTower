@@ -85,6 +85,8 @@ namespace DungeonTower.Items
         [SerializeField] private int _summonMaxHp;
         [Tooltip("Tied to the caster — removed the instant they move, die, or Summon Duration runs out (Aura). Off for an independent object (Totem/Trap/Wall/Cloud).")]
         [SerializeField] private bool _endsIfOwnerMoves;
+        [Tooltip("A true aura: placed on the caster (no tile to pick) and recentered on them every time they move, instead of ending. Only dies with the caster or when Summon Duration runs out. Overrides Ends If Owner Moves. Recasting replaces the old one.")]
+        [SerializeField] private bool _followsOwner;
         [Tooltip("Blocks movement onto the footprint (impassable terrain / a solid Wall).")]
         [SerializeField] private bool _summonBlocksMovement;
         [Tooltip("Blocks line of sight through the footprint without blocking movement (an obscuring cloud; also usually on for a solid Wall).")]
@@ -162,6 +164,7 @@ namespace DungeonTower.Items
         public int SummonDuration => _summonDuration;
         public int SummonMaxHp => _summonMaxHp;
         public bool EndsIfOwnerMoves => _endsIfOwnerMoves;
+        public bool SummonFollowsOwner => _followsOwner;
         public bool SummonBlocksMovement => _summonBlocksMovement;
         public bool SummonBlocksLineOfSight => _summonBlocksLineOfSight;
 
