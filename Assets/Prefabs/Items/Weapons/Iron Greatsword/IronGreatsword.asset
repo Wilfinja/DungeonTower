@@ -35,7 +35,7 @@ MonoBehaviour:
     HealingReceived: 0
     MpRegen: 0
   _abilities:
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
+  - {fileID: 11400000, guid: 456df3c816268d54b8a2ca824cc97200, type: 2}
+  - {fileID: 11400000, guid: 68e1d63c5ac7d5941975a7819bcf2f6b, type: 2}
+  - {fileID: 11400000, guid: a4e3cc72bccf2e244b0879500c2e2278, type: 2}
   _dropsOnDeath: 1

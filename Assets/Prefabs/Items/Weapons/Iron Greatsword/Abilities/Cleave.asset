@@ -57,8 +57,8 @@ MonoBehaviour:
   _summonBlocksMovement: 0
   _summonBlocksLineOfSight: 0
   _range: 1
-  _areaShape: 1
-  _areaRadius: 0
+  _areaShape: 7
+  _areaRadius: 1
   _cooldownTurns: 0
   _mpCost: 0
   _actionCost: 1
@@ -71,8 +71,8 @@ MonoBehaviour:
     WindUpSeconds: 0.3
     GatherEffectPrefab: {fileID: 0}
     GatherOffsetTiles: 0
-    MeleeEffectPrefab: {fileID: 0}
-    MeleeEffectOffsetTiles: 0.6
+    MeleeEffectPrefab: {fileID: 7732059715979230426, guid: ca93695f7197d4f42b0311bbe5b2005a, type: 3}
+    MeleeEffectOffsetTiles: 0.5
     ProjectilePrefab: {fileID: 0}
     ProjectileTilesPerSecond: 14
     ProjectileFadeSeconds: 1

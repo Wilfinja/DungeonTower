@@ -12,10 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9b3c6b5e23a327447837fee5b5dbebb7, type: 3}
   m_Name: Heavy Stane
   m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.AbilitySO
-  _abilityName: 
-  _effectKind: 0
+  _abilityName: Heavy Stance
+  _effectKind: 2
   _statWeights: []
-  _scalingSummary: 
+  _scalingSummary: No stat scaling
   _kind: 0
   _damageMultiplier: 1
   _critChance: 5
@@ -25,8 +25,8 @@ MonoBehaviour:
   _bonus:
     Hp: 0
     Mp: 0
-    PhysicalAttack: 0
-    PhysicalDefense: 0
+    PhysicalAttack: 5
+    PhysicalDefense: -4
     MagicAttack: 0
     MagicDefense: 0
     MoveRange: 0
@@ -57,13 +57,14 @@ MonoBehaviour:
   _range: 1
   _areaShape: 0
   _areaRadius: 0
-  _cooldownTurns: 0
+  _cooldownTurns: 3
   _mpCost: 0
   _actionCost: 1
-  _ignoreEnemies: 0
+  _aiPriority: 0
+  _ignoreEnemies: 1
   _ignoreAllies: 0
   _visuals:
-    WindUp: 0
+    WindUp: 3
     Lunge: 1
     WindUpSeconds: 0.3
     GatherEffectPrefab: {fileID: 0}

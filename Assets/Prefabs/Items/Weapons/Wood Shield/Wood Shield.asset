@@ -21,10 +21,10 @@ MonoBehaviour:
   _requiredStat: 0
   _requiredStatValue: 4
   _passiveBonus:
-    Hp: 5
+    Hp: 7
     Mp: 0
     PhysicalAttack: 0
-    PhysicalDefense: 5
+    PhysicalDefense: 1
     MagicAttack: 0
     MagicDefense: 0
     MoveRange: 0

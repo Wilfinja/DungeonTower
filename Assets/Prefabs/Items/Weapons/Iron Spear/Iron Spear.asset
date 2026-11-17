@@ -15,9 +15,11 @@ MonoBehaviour:
   _weaponName: Iron Spear
   _group: 0
   _hands: 2
-  _requirements: []
+  _requirements:
+  - Stat: 0
+    Value: 5
   _requiredStat: 0
-  _requiredStatValue: 5
+  _requiredStatValue: 1
   _passiveBonus:
     Hp: 0
     Mp: 0

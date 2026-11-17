@@ -107,6 +107,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: DungeonTower.UI::DungeonTower.UI.TileView
   _floorColor: {r: 0.15, g: 0.15, b: 0.15, a: 1}
   _wallColor: {r: 0.4, g: 0.4, b: 0.4, a: 1}
+  _moveHighlightColor: {r: 0.25, g: 0.55, b: 0.85, a: 1}
+  _attackHighlightColor: {r: 0.85, g: 0.3, b: 0.3, a: 1}
+  _previewHighlightColor: {r: 0.9, g: 0.75, b: 0.2, a: 1}
+  _hiddenColor: {r: 0, g: 0, b: 0, a: 1}
+  _exploredDarken: 0.35
+  _doorClosedColor: {r: 0.45, g: 0.3, b: 0.15, a: 1}
+  _doorOpenColor: {r: 0.28, g: 0.19, b: 0.1, a: 1}
+  _exitColor: {r: 0.2, g: 0.7, b: 0.4, a: 1}
 --- !u!61 &6816699608686790552
 BoxCollider2D:
   m_ObjectHideFlags: 0
