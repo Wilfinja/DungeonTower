@@ -1829,6 +1829,14 @@ namespace DungeonTower.UI
             {
                 var overUi = UnityEngine.EventSystems.EventSystem.current != null
                     && UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject();
+
+                // A status icon under the cursor wins over the unit behind it.
+                if (!overUi && TryInspectStatusAt(Mouse.current.position.ReadValue()))
+                {
+                    _inspecting = true;
+                    return true;
+                }
+
                 var tile = overUi ? null : ScreenPointToGridPosition(Mouse.current.position.ReadValue());
                 var enemy = tile.HasValue ? FindLivingUnitAt(tile.Value) : null;
                 if (enemy != null && enemy.Faction == Faction.Enemy && _fog.IsCurrentlyVisible(enemy.Position)
@@ -1844,6 +1852,22 @@ namespace DungeonTower.UI
             {
                 _inspecting = false;
                 if (TooltipView.Instance != null) TooltipView.Instance.Hide();
+            }
+            return false;
+        }
+
+        // Pins a tooltip for the status icon under the cursor, on any
+        // unit whose icons are currently showing. False if there isn't one.
+        private bool TryInspectStatusAt(Vector2 screenPoint)
+        {
+            if (TooltipView.Instance == null) return false;
+            foreach (var bar in _healthBars.Values)
+            {
+                if (bar == null || !bar.TryGetStatusAt(screenPoint, out var unit, out var id)) continue;
+                var status = unit.Status.Get(id);
+                if (status == null) continue;
+                TooltipView.Instance.Show(StatusDescriber.Describe(unit, status), true);
+                return true;
             }
             return false;
         }

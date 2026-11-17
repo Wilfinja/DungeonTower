@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using DungeonTower.Combat;
+using DungeonTower.Core;
 
 namespace DungeonTower.UI
 {
@@ -83,6 +84,16 @@ namespace DungeonTower.UI
                 _chipSlider.maxValue = max;
                 _chipSlider.value = _chipValue;
             }
+        }
+
+        /// <summary>Is there a status icon under this screen point? (Right-click inspect.)</summary>
+        public bool TryGetStatusAt(Vector2 screenPoint, out CombatUnit unit, out StatusEffectId id)
+        {
+            unit = null;
+            id = default;
+            if (_statusRow == null || _canvas == null) return false;
+            Camera uiCamera = _canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : _canvas.worldCamera;
+            return _statusRow.TryGetStatusAt(screenPoint, uiCamera, out unit, out id);
         }
 
         // Defaults to true, so a scene that never calls this behaves

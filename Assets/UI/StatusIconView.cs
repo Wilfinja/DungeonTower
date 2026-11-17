@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using DungeonTower.Core;
 
 namespace DungeonTower.UI
 {
@@ -22,6 +23,9 @@ namespace DungeonTower.UI
 
         private Sprite _placeholderSprite;
 
+        /// <summary>Which status this icon is currently showing (used by right-click inspect).</summary>
+        public StatusEffectId Id { get; private set; }
+
         private void Awake()
         {
             // Remember the prefab's circle so an icon that briefly showed a
@@ -36,8 +40,9 @@ namespace DungeonTower.UI
         }
 
         /// <param name="count">0 (or less) hides the number.</param>
-        public void Bind(StatusVisualsSO.Entry visual, Color borderColor, int count)
+        public void Bind(StatusEffectId id, StatusVisualsSO.Entry visual, Color borderColor, int count)
         {
+            Id = id;
             _border.color = borderColor;
 
             if (visual.Sprite != null)
