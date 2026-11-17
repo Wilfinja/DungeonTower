@@ -91,7 +91,8 @@ namespace DungeonTower.Items
         [SerializeField] private bool _summonBlocksLineOfSight;
 
         [Header("Targeting")]
-        [SerializeField, Min(1)] private int _range = 1;
+        [Tooltip("0 = Self: the caster is the only thing you can aim at (click your own tile). Area shapes then spread from the caster, e.g. Blast radius 2 is a nova around you. Line, Cone and Sweep need a direction, so give those a Range of 1 or more. Summons need a free tile, so they can't be Self.")]
+        [SerializeField, Min(0)] private int _range = 1;
         [SerializeField] private AttackShape _areaShape = AttackShape.Single;
         [SerializeField, Min(0)] private int _areaRadius;
         [SerializeField, Min(0)] private int _cooldownTurns;

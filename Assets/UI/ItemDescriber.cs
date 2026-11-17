@@ -231,7 +231,7 @@ namespace DungeonTower.UI
         // "Range 3 · Enemies · Single target · Cooldown 2 turns"
         private static void AppendTargeting(StringBuilder sb, IAbility ability, UnitStats viewer)
         {
-            var parts = new List<string> { $"Range {ability.Range}", $"{ability.ActionCost} action{(ability.ActionCost == 1 ? "" : "s")}" };
+            var parts = new List<string> { AbilityTargeting.IsSelfCast(ability) ? "Self" : $"Range {ability.Range}", $"{ability.ActionCost} action{(ability.ActionCost == 1 ? "" : "s")}" };
 
             // Red when the viewer's MAX MP is below the cost — they could never cast it.
             if (ability.MpCost > 0)
