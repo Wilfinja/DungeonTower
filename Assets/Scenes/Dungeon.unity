@@ -1867,7 +1867,7 @@ MonoBehaviour:
   _turnTracker: {fileID: 134645539}
   _lootToggleButton: {fileID: 911585868}
   _healthBarPrefab: {fileID: 7636920624206797972, guid: 191030404e04dc443a721d50ca449a5c, type: 3}
-  _partyHud: {fileID: 0}
+  _partyHud: {fileID: 73813786}
   _hitFeedback: {fileID: 209310944}
   _healthBarContainer: {fileID: 880976071}
   _chests: []
@@ -1907,6 +1907,7 @@ MonoBehaviour:
   _startingSpareWeapons:
   - {fileID: 11400000, guid: 0949dd566ee437a4592b0562e91c7070, type: 2}
   - {fileID: 11400000, guid: ccb9a4c03547b32489ddbc73044c758e, type: 2}
+  - {fileID: 11400000, guid: 467ea86d8f3ce5249a0c2bccd185f69c, type: 2}
   _startingSpareArmor: []
   _startingPotions: []
   _startingScrolls:
@@ -13354,6 +13355,7 @@ RectTransform:
   m_LocalScale: {x: 0, y: 0, z: 0}
   m_ConstrainProportionsScale: 0
   m_Children:
+  - {fileID: 73813785}
   - {fileID: 880976071}
   - {fileID: 1102231065}
   - {fileID: 610176511}
@@ -13365,7 +13367,6 @@ RectTransform:
   - {fileID: 1973049090}
   - {fileID: 134645538}
   - {fileID: 1991453283}
-  - {fileID: 73813785}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}

@@ -37,7 +37,26 @@ MonoBehaviour:
     Potency: 0
     HealingReceived: 0
     MpRegen: 0
-  _statuses: []
+  _statuses:
+  - Id: 0
+    Chance: 40
+    Stacks: 2
+    Duration: 0
+    Magnitude: 0
+    StatBonus:
+      Hp: 0
+      Mp: 0
+      PhysicalAttack: 0
+      PhysicalDefense: 0
+      MagicAttack: 0
+      MagicDefense: 0
+      MoveRange: 0
+      StatusResist: 0
+      CritChance: 0
+      SupportPower: 0
+      Potency: 0
+      HealingReceived: 0
+      MpRegen: 0
   _silenceable: 0
   _cleanses: 
   _pushDistance: 0
@@ -53,15 +72,16 @@ MonoBehaviour:
   _summonDuration: 0
   _summonMaxHp: 0
   _endsIfOwnerMoves: 0
+  _followsOwner: 0
   _summonBlocksMovement: 0
   _summonBlocksLineOfSight: 0
-  _range: 1
-  _areaShape: 0
-  _areaRadius: 0
-  _cooldownTurns: 0
+  _range: 3
+  _areaShape: 6
+  _areaRadius: 4
+  _cooldownTurns: 4
   _mpCost: 0
-  _actionCost: 1
-  _aiPriority: 0
+  _actionCost: 2
+  _aiPriority: 2
   _ignoreEnemies: 0
   _ignoreAllies: 0
   _visuals:

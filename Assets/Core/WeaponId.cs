@@ -11,9 +11,10 @@ namespace DungeonTower.Core
     {
         Sword,
         Mace,
-        SwordandShield,
-        AxeandShield,
+        Shield,
+        Axe,
         Staff,
+        Wand,
         Spear,
         WarAxe,
         Bow

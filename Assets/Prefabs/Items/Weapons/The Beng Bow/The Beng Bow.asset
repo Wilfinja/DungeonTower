@@ -13,11 +13,11 @@ MonoBehaviour:
   m_Name: The Beng Bow
   m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.WeaponSO
   _weaponName: The Beng Bow
-  _group: 0
-  _hands: 0
+  _group: 8
+  _hands: 2
   _requirements: []
   _requiredStat: 0
-  _requiredStatValue: 4
+  _requiredStatValue: 11
   _passiveBonus:
     Hp: 0
     Mp: 0
@@ -32,5 +32,8 @@ MonoBehaviour:
     Potency: 0
     HealingReceived: 0
     MpRegen: 0
-  _abilities: []
+  _abilities:
+  - {fileID: 11400000, guid: 26a005fb256cd4d4592de2e1697fb7bc, type: 2}
+  - {fileID: 11400000, guid: 17f2eeb61570b184bb58a6db4c9b1972, type: 2}
+  - {fileID: 11400000, guid: 0245a77cb365d254f869e2e55da4a4e5, type: 2}
   _dropsOnDeath: 1

@@ -17,7 +17,7 @@ MonoBehaviour:
   _hands: 1
   _requirements:
   - Stat: 0
-    Value: 4
+    Value: 5
   _requiredStat: 0
   _requiredStatValue: 4
   _passiveBonus:
@@ -36,4 +36,5 @@ MonoBehaviour:
     MpRegen: 0
   _abilities:
   - {fileID: 11400000, guid: 1d3039fdee10b04479dcf2aa981a5d38, type: 2}
+  - {fileID: 11400000, guid: 0c8f7dcc86fc1874880f09805792e59d, type: 2}
   _dropsOnDeath: 1

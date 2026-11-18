@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Iron Spear
   m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.WeaponSO
   _weaponName: Iron Spear
-  _group: 0
+  _group: 6
   _hands: 2
   _requirements:
   - Stat: 0

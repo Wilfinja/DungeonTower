@@ -10,15 +10,16 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9b3c6b5e23a327447837fee5b5dbebb7, type: 3}
-  m_Name: Bash
+  m_Name: Push
   m_EditorClassIdentifier: DungeonTower.Items::DungeonTower.Items.AbilitySO
-  _abilityName: Bash
+  _abilityName: Push
   _effectKind: 0
-  _statWeights: []
-  _scalingSummary: 'Total weight 1.10 = Body 1.10  (guide: pure 1.0, hybrid 1.2)  
-    [from legacy fields]'
+  _statWeights:
+  - Stat: 0
+    Weight: 0.2
+  _scalingSummary: 'Total weight 0.20 = Body 0.20  (guide: pure 1.0, hybrid 1.2)'
   _kind: 0
-  _damageMultiplier: 1.1
+  _damageMultiplier: 1
   _critChance: 5
   _healHp: 0
   _healMp: 0
@@ -30,7 +31,6 @@ MonoBehaviour:
     PhysicalDefense: 0
     MagicAttack: 0
     MagicDefense: 0
-    Initiative: 0
     MoveRange: 0
     StatusResist: 0
     CritChance: 0
@@ -42,7 +42,7 @@ MonoBehaviour:
   - Id: 13
     Chance: 50
     Stacks: 0
-    Duration: 2
+    Duration: 1
     Magnitude: 0
     StatBonus:
       Hp: 0
@@ -51,27 +51,6 @@ MonoBehaviour:
       PhysicalDefense: 0
       MagicAttack: 0
       MagicDefense: 0
-      Initiative: 0
-      MoveRange: 0
-      StatusResist: 0
-      CritChance: 0
-      SupportPower: 0
-      Potency: 0
-      HealingReceived: 0
-      MpRegen: 0
-  - Id: 14
-    Chance: 50
-    Stacks: 0
-    Duration: 2
-    Magnitude: 0
-    StatBonus:
-      Hp: 0
-      Mp: 0
-      PhysicalAttack: 0
-      PhysicalDefense: 0
-      MagicAttack: 0
-      MagicDefense: 0
-      Initiative: 0
       MoveRange: 0
       StatusResist: 0
       CritChance: 0
@@ -81,7 +60,9 @@ MonoBehaviour:
       MpRegen: 0
   _silenceable: 0
   _cleanses: 
-  _pushDistance: 0
+  _pushDistance: 3
+  _pushMode: 0
+  _slamDamagePerTile: 3
   _swapWithCaster: 0
   _summonTriggerMode: 0
   _auraRadius: 0
@@ -92,16 +73,24 @@ MonoBehaviour:
   _summonDuration: 0
   _summonMaxHp: 0
   _endsIfOwnerMoves: 0
+  _followsOwner: 0
   _summonBlocksMovement: 0
   _summonBlocksLineOfSight: 0
   _range: 1
-  _areaShape: 3
-  _areaRadius: 2
-  _cooldownTurns: 3
+  _areaShape: 0
+  _areaRadius: 0
+  _cooldownTurns: 2
   _mpCost: 0
+  _actionCost: 1
+  _aiPriority: 1
+  _ignoreEnemies: 0
+  _ignoreAllies: 0
   _visuals:
+    WindUp: 0
     Lunge: 1
     WindUpSeconds: 0.3
+    GatherEffectPrefab: {fileID: 0}
+    GatherOffsetTiles: 0
     MeleeEffectPrefab: {fileID: 0}
     MeleeEffectOffsetTiles: 0.6
     ProjectilePrefab: {fileID: 0}
@@ -109,6 +98,7 @@ MonoBehaviour:
     ProjectileFadeSeconds: 0.25
     ImpactEffectPrefab: {fileID: 2594805632712206330, guid: 6adff75149fb6b746af9b987ee9cd574, type: 3}
     OrientImpactToAttack: 1
+    ImpactMatchesRecoil: 1
     AreaEffectPrefab: {fileID: 0}
     AreaEffectOnEveryTile: 0
     EffectLifetime: 2

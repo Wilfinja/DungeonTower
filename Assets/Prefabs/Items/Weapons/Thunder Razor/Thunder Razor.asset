@@ -17,7 +17,7 @@ MonoBehaviour:
   _hands: 0
   _requirements:
   - Stat: 0
-    Value: 6
+    Value: 10
   _requiredStat: 0
   _requiredStatValue: 1
   _passiveBonus:
@@ -31,7 +31,7 @@ MonoBehaviour:
     StatusResist: 0
     CritChance: 0
     SupportPower: 0
-    Potency: 0
+    Potency: 2
     HealingReceived: 0
     MpRegen: 0
   _abilities:
