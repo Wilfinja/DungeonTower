@@ -61,7 +61,7 @@ MonoBehaviour:
   _cooldownTurns: 3
   _mpCost: 0
   _actionCost: 1
-  _aiPriority: 0
+  _aiPriority: 2
   _ignoreEnemies: 1
   _ignoreAllies: 0
   _visuals:

@@ -95,6 +95,51 @@ namespace DungeonTower.Core
             }
         }
 
+        private float SumPassives(Func<IPassive, float> pick)
+        {
+            float total = 0f;
+            var list = EquippedArmor?.Passives;
+            if (list != null) foreach (var p in list) total += pick(p);
+            return total;
+        }
+
+        public float PassiveThorns => SumPassives(p => p.passiveThornsPercent);
+        public int PassiveRange => (int)SumPassives(p => p.passiveRangeBonus);
+        public int PassivePushBonus => (int)SumPassives(p => p.passivePushRange);
+        public int PassivePullBonus => (int)SumPassives(p => p.passivePullRange);
+        public int PassivePushResist => (int)SumPassives(p => p.passivePushResist);
+        public int PassivePullResist => (int)SumPassives(p => p.passivePullResist);
+        public int PassiveAuraDamage => (int)SumPassives(p => p.passiveAuraDamage);
+
+        public int PassiveAuraRange
+        {
+            get
+            {
+                int best = 0;
+                var list = EquippedArmor?.Passives;
+                if (list != null) foreach (var p in list) best = Math.Max(best, p.passiveAuraRange);
+                return best;
+            }
+        }
+
+        public bool IsImmuneTo(StatusEffectId id)
+        {
+            var list = EquippedArmor?.Passives;
+            if (list != null) foreach (var p in list) if (p.passiveImmunity.Contains(id)) return true;
+            return false;
+        }
+
+        public float PassiveDamageWith(WeaponId group)
+        {
+            float total = 0f;
+            var list = EquippedArmor?.Passives;
+            if (list != null)
+                foreach (var p in list)
+                    foreach (var b in p.passiveWeaponDamage)
+                        if (b.Weapon == group) total += b.Damage;
+            return total;
+        }
+
         public UnitStats(StatBlock startingStats, int startingLevel = 1, int startingPoints = 0)
         {
             Level = startingLevel;

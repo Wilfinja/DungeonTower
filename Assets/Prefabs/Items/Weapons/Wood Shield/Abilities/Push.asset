@@ -40,7 +40,7 @@ MonoBehaviour:
     MpRegen: 0
   _statuses:
   - Id: 13
-    Chance: 50
+    Chance: 25
     Stacks: 0
     Duration: 1
     Magnitude: 0
