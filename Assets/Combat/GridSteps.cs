@@ -112,7 +112,7 @@ namespace DungeonTower.Combat
         // Move Range 1 can't step diagonally. Flip this to true to let
         // every adjacent tile, diagonals included, always count as in
         // range for melee-style abilities.
-        public static bool DiagonalNeighborsAlwaysInRange = false;
+        public static bool DiagonalNeighborsAlwaysInRange = true;
 
         public static int StepDistance(this GridPosition from, GridPosition to)
         {

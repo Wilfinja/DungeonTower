@@ -51,6 +51,11 @@ namespace DungeonTower.UI
             var lines = BonusLines(armor.PassiveBonus);
             sb.Append('\n');
             sb.Append(lines.Count > 0 ? "Grants: " + string.Join(", ", lines) : "No stat bonuses");
+
+            if (armor.Passives != null)
+                foreach (var p in armor.Passives)
+                    foreach (var line in PassiveLines(p)) sb.Append('\n').Append(line);
+
             return sb.ToString();
         }
 
@@ -177,6 +182,35 @@ namespace DungeonTower.UI
             AddBonus(lines, b.HealingReceived, "Healing Received", "%");
             AddBonus(lines, b.MpRegen, "MP Regen");
             return lines;
+        }
+
+        private static List<string> PassiveLines(IPassive p)
+        {
+            var l = new List<string>();
+            if (p.passivehpRegen > 0) l.Add($"+{p.passivehpRegen} HP per turn");
+            if (p.passivempRegen > 0) l.Add($"+{p.passivempRegen} MP per turn");
+            if (p.passiveRangeBonus > 0) l.Add($"+{p.passiveRangeBonus} range on ranged abilities");
+            if (p.passivePushRange > 0) l.Add($"+{p.passivePushRange} push distance");
+            if (p.passivePullRange > 0) l.Add($"+{p.passivePullRange} pull distance");
+            if (p.passivePushResist > 0) l.Add($"Pushed {p.passivePushResist} fewer tiles");
+            if (p.passivePullResist > 0) l.Add($"Pulled {p.passivePullResist} fewer tiles");
+            if (p.passiveThornsPercent > 0f)
+                l.Add($"Reflects {p.passiveThornsPercent:0.#}% of damage taken" + (p.passiveThornsReach > 0 ? $" (reach +{p.passiveThornsReach})" : ""));
+            foreach (var id in p.passiveImmunity) l.Add($"Immune to {id}");
+            foreach (var w in p.passiveWeaponDamage) l.Add($"+{w.Damage:0.#} damage with {w.Weapon}");
+            if (p.passiveAuraDamage > 0 && p.passiveAuraRange > 0)
+                l.Add($"End of turn: {p.passiveAuraDamage} damage to enemies within {p.passiveAuraRange}");
+            if (p.passiveAuraHeal > 0 && p.passiveAuraHealRange > 0)
+                l.Add($"End of turn: heals allies within {p.passiveAuraHealRange} for {p.passiveAuraHeal}");
+            if (p.passiveOnKillHeal > 0) l.Add($"On kill: heal {p.passiveOnKillHeal} HP");
+            if (p.passiveOnKillMp > 0) l.Add($"On kill: restore {p.passiveOnKillMp} MP");
+            foreach (var s in p.passiveOnKillStatuses) l.Add($"On kill: gain {s.Id}");
+            if (p.passiveLastStandThreshold > 0f)
+                l.Add($"Below {p.passiveLastStandThreshold:0.#}% HP: "
+                      + (p.passiveLastStandReduction > 0f ? $"{p.passiveLastStandReduction:0.#}% less damage taken" : "")
+                      + (p.passiveLastStandReduction > 0f && p.passiveLastStandBonus > 0f ? ", " : "")
+                      + (p.passiveLastStandBonus > 0f ? $"{p.passiveLastStandBonus:0.#}% more damage dealt" : ""));
+            return l;
         }
 
         private static void AddBonus(List<string> lines, float value, string label, string suffix = "")

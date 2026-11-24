@@ -20,6 +20,16 @@ namespace DungeonTower.Core
 
         float passiveThornsPercent { get; }
 
+        int passiveAuraHeal { get; }
+        int passiveAuraHealRange { get; }
+        int passiveOnKillHeal { get; }
+        int passiveOnKillMp { get; }
+        IReadOnlyList<StatusApplication> passiveOnKillStatuses { get; }
+        float passiveLastStandThreshold { get; }   // % of max HP
+        float passiveLastStandReduction { get; }   // % less damage taken
+        float passiveLastStandBonus { get; }       // % more damage dealt
+        int passiveThornsReach { get; }
+
         IReadOnlyList<StatusEffectId> passiveImmunity { get; }
         IReadOnlyList<WeaponDamageBonus> passiveWeaponDamage { get; }
 

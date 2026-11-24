@@ -47,6 +47,7 @@ namespace DungeonTower.Combat
 
             float rawDamage = Math.Max(MinimumDamage, attack - defense);
             if (isCrit) rawDamage *= CritDamageMultiplier;
+            rawDamage *= 1f + attacker.Stats.PassiveLastStandBonus(attacker.CurrentHp) / 100f;
 
             return new AttackResult(isCrit, (int)Math.Round(rawDamage, MidpointRounding.AwayFromZero));
         }

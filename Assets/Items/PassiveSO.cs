@@ -30,6 +30,8 @@ namespace DungeonTower.Items
         [Header("Defenseive")]
         [Tooltip("% of damage reflected on a melee attacker")]
         [SerializeField] private float thornsPercent;
+        [Tooltip("Extra tiles beyond adjacent that thorns can reach.")]
+        [SerializeField, Min(0)] private int thornsReach;
         [Tooltip("The amount of squares that are resisted from being pushed")]
         [SerializeField] private int pushResist;
         [Tooltip("The amount of squares that are resisted from being pulled")]
@@ -38,13 +40,29 @@ namespace DungeonTower.Items
         [SerializeField] private List<StatusEffectId> statusImmunity = new List<StatusEffectId>();
 
 
-        [Header("Aura Damage")]
+        [Header("Aura")]
         [Tooltip("The type of damage dealt through the aura)")]
         [SerializeField] private AttackKind _kind;
         [Tooltip("The amount of damage dealt")]
         [SerializeField] private int auraDamage;
-        [Tooltip("The range of the aura")]
+        [Tooltip("The range of the aura that deals damage")]
         [SerializeField] private int auraRange;
+        [Tooltip("The amount of heal given to allies but not to self")]
+        [SerializeField] private int auraHeal;
+        [Tooltip("The range of the aura that heals allies")]
+        [SerializeField, Min(0)] private int auraHealRange;
+
+        [Header("On Kill")]
+        [SerializeField] private int onKillHeal;
+        [SerializeField] private int onKillMp;
+        [Tooltip("Applied to the wearer when they kill an enemy.")]
+        [SerializeField] private List<StatusApplication> onKillStatuses = new List<StatusApplication>();
+
+        [Header("Last Stand")]
+        [Tooltip("Active at or below this % of max HP. 0 = off.")]
+        [SerializeField, Range(0f, 100f)] private float lastStandThreshold;
+        [SerializeField, Range(0f, 90f)] private float lastStandReduction;
+        [SerializeField, Min(0f)] private float lastStandBonus;
 
 
         public string Name => passiveName;
@@ -67,7 +85,15 @@ namespace DungeonTower.Items
         public int passiveAuraDamage => auraDamage;
         public int passiveAuraRange => auraRange;
 
-
+        public int passiveThornsReach => thornsReach;
+        public int passiveAuraHeal => auraHeal;
+        public int passiveAuraHealRange => auraHealRange;
+        public int passiveOnKillHeal => onKillHeal;
+        public int passiveOnKillMp => onKillMp;
+        public IReadOnlyList<StatusApplication> passiveOnKillStatuses => onKillStatuses;
+        public float passiveLastStandThreshold => lastStandThreshold;
+        public float passiveLastStandReduction => lastStandReduction;
+        public float passiveLastStandBonus => lastStandBonus;
 
 
     }

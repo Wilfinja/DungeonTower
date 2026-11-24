@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace DungeonTower.Core
@@ -111,6 +112,10 @@ namespace DungeonTower.Core
         public int PassivePushResist => (int)SumPassives(p => p.passivePushResist);
         public int PassivePullResist => (int)SumPassives(p => p.passivePullResist);
         public int PassiveAuraDamage => (int)SumPassives(p => p.passiveAuraDamage);
+        public int PassiveThornsReach => (int)SumPassives(p => p.passiveThornsReach);
+        public int PassiveAuraHeal => (int)SumPassives(p => p.passiveAuraHeal);
+        public int PassiveOnKillHeal => (int)SumPassives(p => p.passiveOnKillHeal);
+        public int PassiveOnKillMp => (int)SumPassives(p => p.passiveOnKillMp);
 
         public int PassiveAuraRange
         {
@@ -140,6 +145,37 @@ namespace DungeonTower.Core
                         if (b.Weapon == group) total += b.Damage;
             return total;
         }
+
+        public int PassiveAuraHealRange
+        {
+            get
+            {
+                int best = 0;
+                var list = EquippedArmor?.Passives;
+                if (list != null) foreach (var p in list) best = Math.Max(best, p.passiveAuraHealRange);
+                return best;
+            }
+        }
+
+        public IEnumerable<StatusApplication> PassiveOnKillStatuses
+        {
+            get
+            {
+                var list = EquippedArmor?.Passives;
+                if (list != null)
+                    foreach (var p in list)
+                        foreach (var app in p.passiveOnKillStatuses) yield return app;
+            }
+        }
+
+        private bool LastStandActive(IPassive p, int currentHp)
+            => p.passiveLastStandThreshold > 0f && currentHp * 100f <= MaxHp * p.passiveLastStandThreshold;
+
+        public float PassiveLastStandReduction(int currentHp)
+            => SumPassives(p => LastStandActive(p, currentHp) ? p.passiveLastStandReduction : 0f);
+
+        public float PassiveLastStandBonus(int currentHp)
+            => SumPassives(p => LastStandActive(p, currentHp) ? p.passiveLastStandBonus : 0f);
 
         public UnitStats(StatBlock startingStats, int startingLevel = 1, int startingPoints = 0)
         {

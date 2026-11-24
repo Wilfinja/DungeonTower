@@ -64,6 +64,14 @@ namespace DungeonTower.Combat
                 damage = boosted;
             }
 
+            float reduction = Math.Min(90f, defender.Stats.PassiveLastStandReduction(defender.CurrentHp));
+            if (reduction > 0f && damage > 0)
+            {
+                int reduced = Math.Max(1, (int)Math.Round(damage * (1f - reduction / 100f), MidpointRounding.AwayFromZero));
+                outcome.Log.Add($"{defender.DisplayName}'s last stand softens the blow by {damage - reduced}.");
+                damage = reduced;
+            }
+
             outcome.FinalDamage = damage;
 
             // 3. Ward
@@ -96,7 +104,7 @@ namespace DungeonTower.Combat
             float thornsPct = (thorns?.Magnitude ?? 0f) + defender.Stats.PassiveThorns;
             if (defender.IsAlive && attacker != defender && attacker.IsAlive
                 && outcome.HpLost > 0 && thornsPct > 0f
-                && attacker.Position.ManhattanDistance(defender.Position) <= ThornsMaxRange)
+                && attacker.Position.IsWithinRange(defender.Position, ThornsMaxRange + defender.Stats.PassiveThornsReach))
             {
                 int reflected = Math.Max(1, Scale(outcome.HpLost, thornsPct, bonusOnly: true));
                 attacker.ApplyDamage(reflected, out bool attackerSaved);

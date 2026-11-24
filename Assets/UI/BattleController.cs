@@ -3353,6 +3353,9 @@ namespace DungeonTower.UI
         {
             Debug.Log($"{unit.DisplayName} has fallen.");
 
+            if (killer != null && killer != unit && killer.IsAlive && killer.Faction != unit.Faction)
+                ApplyOnKillPassives(killer);
+
             foreach (var ended in _battlefieldObjects.RemoveAllOwnedBy(unit))
                 Debug.Log($"{unit.DisplayName}'s {ended.Name} fades as they fall.");
 
@@ -3395,6 +3398,16 @@ namespace DungeonTower.UI
             }
 
             RefreshFogOfWar();
+        }
+
+        private void ApplyOnKillPassives(CombatUnit killer)
+        {
+            var stats = killer.Stats;
+            if (stats.PassiveOnKillHeal > 0) killer.ReceiveHeal(stats.PassiveOnKillHeal);
+            if (stats.PassiveOnKillMp > 0) killer.RestoreMp(stats.PassiveOnKillMp);
+            foreach (var app in stats.PassiveOnKillStatuses)
+                killer.Status.Apply(app, killer, _rng);
+            _unitViews[killer].Refresh();
         }
 
         // The killer earns the full reward; every other LIVING hero earns
@@ -4012,6 +4025,7 @@ namespace DungeonTower.UI
             ending.ReceiveHeal(ending.Stats.PassiveHPRegen);
             ending.RestoreMp(ending.Stats.PassiveMpRegen);
             ApplyEndOfTurnAura(ending);
+            ApplyEndOfTurnAuraHeal(ending);
             foreach (var line in endTick.Log) Debug.Log(line);
             if (wasAlive && !ending.IsAlive)
             {
@@ -4034,7 +4048,24 @@ namespace DungeonTower.UI
                 other.ApplyDamage(damage, out _);
                 Debug.Log($"{unit.DisplayName}'s aura hurts {other.DisplayName} for {damage}.");
                 _unitViews[other].Refresh();
-                if (!other.IsAlive) HandleDeath(other);
+                if (!other.IsAlive) HandleDeath(other, unit);
+            }
+        }
+
+        private void ApplyEndOfTurnAuraHeal(CombatUnit unit)
+        {
+            int amount = unit.Stats.PassiveAuraHeal;
+            int range = unit.Stats.PassiveAuraHealRange;
+            if (!unit.IsAlive || amount <= 0 || range <= 0) return;
+
+            foreach (var ally in _unitViews.Keys.ToList())
+            {
+                if (ally == unit || !ally.IsAlive || ally.Faction != unit.Faction) continue;
+                if (!unit.Position.IsWithinRange(ally.Position, range)) continue;
+
+                ally.ReceiveHeal(amount);
+                Debug.Log($"{unit.DisplayName}'s aura heals {ally.DisplayName} for {amount}.");
+                _unitViews[ally].Refresh();
             }
         }
 
