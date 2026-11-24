@@ -93,11 +93,12 @@ namespace DungeonTower.Combat
 
             // 5. Thorns
             var thorns = defender.Status.Get(StatusEffectId.Thorns);
-            if (thorns != null && defender.IsAlive && attacker != defender && attacker.IsAlive
-                && outcome.HpLost > 0 && thorns.Magnitude > 0f
+            float thornsPct = (thorns?.Magnitude ?? 0f) + defender.Stats.PassiveThorns;
+            if (defender.IsAlive && attacker != defender && attacker.IsAlive
+                && outcome.HpLost > 0 && thornsPct > 0f
                 && attacker.Position.ManhattanDistance(defender.Position) <= ThornsMaxRange)
             {
-                int reflected = Math.Max(1, Scale(outcome.HpLost, thorns.Magnitude, bonusOnly: true));
+                int reflected = Math.Max(1, Scale(outcome.HpLost, thornsPct, bonusOnly: true));
                 attacker.ApplyDamage(reflected, out bool attackerSaved);
                 outcome.Reflected = reflected;
                 outcome.Log.Add($"{defender.DisplayName}'s thorns reflect {reflected} damage onto {attacker.DisplayName}.");

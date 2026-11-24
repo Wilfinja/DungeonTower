@@ -9,6 +9,7 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
+using static UnityEngine.UI.CanvasScaler;
 
 namespace DungeonTower.UI
 {
@@ -1688,9 +1689,17 @@ namespace DungeonTower.UI
             if (ability.AreaShape == AttackShape.Single || ability.AreaShape == AttackShape.Chain)
                 return GetSingleTargetTiles(unit, ability);
 
-            return GridRange.Within(unit.Position, ability.Range)
+            return GridRange.Within(unit.Position, RangeOf(unit,ability))
                 .Where(InBounds)
                 .ToList();
+        }
+
+        private static int RangeOf(CombatUnit unit, IAbility ability)
+        {
+            if (ability == null) return 1;
+            int r = ability.Range;
+            if (r >= 2) r += unit.Stats.PassiveRange;   // melee untouched
+            return r;
         }
 
         // A Summon lands on an empty, walkable tile within Range
@@ -1702,7 +1711,7 @@ namespace DungeonTower.UI
         private List<GridPosition> GetSummonTargetTiles(CombatUnit unit, IAbility ability)
             => ability.SummonFollowsOwner
                 ? new List<GridPosition> { unit.Position }   // a following aura always goes on the caster
-                : GridRange.Within(unit.Position, ability.Range)
+                : GridRange.Within(unit.Position, RangeOf(unit,ability))
                 .Where(pos => InBounds(pos) && _movementMap.IsWalkable(pos) && FindLivingUnitAt(pos) == null
                     && LineOfSight.HasClearPath(unit.Position, pos, _sightMap))
                 .ToList();
@@ -1717,7 +1726,7 @@ namespace DungeonTower.UI
                 .Where(u => u.IsAlive
                     && (targetAllies ? u.Faction == unit.Faction : u.Faction != unit.Faction)
                     && AbilityTargeting.Affects(ability, u.Faction == unit.Faction)
-                    && u.Position.IsWithinRange(unit.Position, ability.Range)
+                    && u.Position.IsWithinRange(unit.Position, RangeOf(unit, ability))
                     && LineOfSight.HasClearPath(unit.Position, u.Position, _sightMap))
                 .Select(u => u.Position)
                 .ToList();
@@ -1728,7 +1737,7 @@ namespace DungeonTower.UI
             if (ability.EffectKind == EffectKind.Damage)
                 tiles.AddRange(_battlefieldObjects.Active
                     .Where(o => o.MaxHp.HasValue
-                        && o.Tiles.Any(t => unit.Position.IsWithinRange(t, ability.Range)
+                        && o.Tiles.Any(t => unit.Position.IsWithinRange(t, RangeOf(unit, ability))
                             && LineOfSight.HasClearPath(unit.Position, t, _sightMap)))
                     .SelectMany(o => o.Tiles));
 
@@ -2368,7 +2377,7 @@ namespace DungeonTower.UI
 
             if (!InRangeFrom(plan.From, believed, ability) && enemy.Status.CanMove && !plan.MovePlanned)
             {
-                int spent = PlanEnemyMove(enemy, believed, ability.Range, plan.Budget, ability.ActionCost * Half);
+                int spent = PlanEnemyMove(enemy, believed, RangeOf(enemy, ability), plan.Budget, ability.ActionCost * Half);
                 if (spent > 0)
                 {
                     plan.Budget -= spent;
@@ -2500,7 +2509,7 @@ namespace DungeonTower.UI
                     plan.Budget -= o.CostHalf;
                     plan.Mp -= o.MpCost;
                     if (o.OncePerPhase) plan.UsedCooldowns.Add(o.Ability);
-                    longestRange = Mathf.Max(longestRange, o.Ability.Range);
+                    longestRange = Mathf.Max(longestRange, RangeOf(enemy, o.Ability));
                 }
 
                 PlanBackAway(enemy, plan, longestRange);
@@ -2511,7 +2520,7 @@ namespace DungeonTower.UI
             if (canWalk)
             {
                 var lead = options.OrderByDescending(o => o.Score).Select(o => (EnemyAbilityPlanner.Option?)o).FirstOrDefault();
-                int range = lead.HasValue ? lead.Value.Ability.Range : 1;
+                int range = lead.HasValue ? RangeOf(enemy, lead.Value.Ability): 1;
                 int reserve = lead.HasValue ? lead.Value.CostHalf : 0;
                 int spent = PlanEnemyMove(enemy, believed, range, plan.Budget, reserve);
                 if (spent > 0)
@@ -2648,7 +2657,7 @@ namespace DungeonTower.UI
             }
             else if (target != null && !target.IsAlive) yield break;
 
-            if (!enemy.Position.IsWithinRange(tile, ability.Range)
+            if (!enemy.Position.IsWithinRange(tile, RangeOf(enemy, ability))
                 || !LineOfSight.HasClearPath(enemy.Position, tile, _sightMap))
                 yield break;
 
@@ -3101,7 +3110,7 @@ namespace DungeonTower.UI
                     .Where(u => u.IsAlive && !hit.Contains(u)
                         && (targetsAllies ? u.Faction == attacker.Faction : u.Faction != attacker.Faction)
                         && AbilityTargeting.Affects(ability, u.Faction == attacker.Faction)
-                        && u.Position.IsWithinRange(current.Position, ability.Range)
+                        && u.Position.IsWithinRange(current.Position, RangeOf(attacker, ability))
                         && LineOfSight.HasClearPath(current.Position, u.Position, _sightMap))
                     .OrderBy(u => u.Position.StepDistance(current.Position))
                     .FirstOrDefault();
