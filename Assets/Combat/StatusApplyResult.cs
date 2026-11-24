@@ -6,7 +6,8 @@ namespace DungeonTower.Combat
         Stacked,     // already present; stacks were added
         Refreshed,   // already present; duration/magnitude refreshed
         ProcFailed,  // the ability's Chance roll missed
-        Resisted     // the target's StatusResist roll succeeded
+        Resisted,     // the target's StatusResist roll succeeded
+        Immune         // the target is wearing armor that makes them immune
     }
 
     public readonly struct StatusApplyResult

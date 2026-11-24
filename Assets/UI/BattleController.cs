@@ -2364,8 +2364,8 @@ namespace DungeonTower.UI
             EndTurn();
         }
 
-        private bool InRangeFrom(GridPosition from, GridPosition target, IAbility ability)
-            => from.IsWithinRange(target, ability?.Range ?? 1)
+        private bool InRangeFrom(CombatUnit unit, GridPosition from, GridPosition target, IAbility ability)
+            => from.IsWithinRange(target, RangeOf(unit, ability))
                && LineOfSight.HasClearPath(from, target, _sightMap);
 
         // A heal or buff on an ally: walk into range if needed (that uses the
@@ -2375,7 +2375,7 @@ namespace DungeonTower.UI
             const int Half = ActionPoints.HalfPerAction;
             var believed = target.Position;
 
-            if (!InRangeFrom(plan.From, believed, ability) && enemy.Status.CanMove && !plan.MovePlanned)
+            if (!InRangeFrom(enemy, plan.From, believed, ability) && enemy.Status.CanMove && !plan.MovePlanned)
             {
                 int spent = PlanEnemyMove(enemy, believed, RangeOf(enemy, ability), plan.Budget, ability.ActionCost * Half);
                 if (spent > 0)
@@ -2386,7 +2386,7 @@ namespace DungeonTower.UI
                 }
             }
 
-            while (ability != null && InRangeFrom(plan.From, believed, ability) && plan.Budget >= ability.ActionCost * Half)
+            while (ability != null && InRangeFrom(enemy, plan.From, believed, ability) && plan.Budget >= ability.ActionCost * Half)
             {
                 _swarmAttacks.Add((enemy, EnemyAttack(enemy, ability, believed, target)));
                 plan.Budget -= ability.ActionCost * Half;
@@ -2460,7 +2460,7 @@ namespace DungeonTower.UI
                 int mask = 0;
                 for (int i = 0; i < options.Count; i++)
                 {
-                    if (!InRangeFrom(stand.Key, believed, options[i].Ability)) continue;
+                    if (!InRangeFrom(enemy, stand.Key, believed, options[i].Ability)) continue;
                     usable.Add(options[i]);
                     mask |= 1 << i;
                 }
@@ -2504,7 +2504,7 @@ namespace DungeonTower.UI
                 foreach (var o in bestSeq)
                 {
                     // Only count the attacks that still stand a chance from where the enemy ends up.
-                    if (!InRangeFrom(plan.From, believed, o.Ability)) continue;
+                    if (!InRangeFrom(enemy, plan.From, believed, o.Ability)) continue;
                     _swarmAttacks.Add((enemy, EnemyAttack(enemy, o.Ability, believed, target)));
                     plan.Budget -= o.CostHalf;
                     plan.Mp -= o.MpCost;
@@ -2943,8 +2943,11 @@ namespace DungeonTower.UI
         {
             if (!target.IsAlive) yield break;
 
-            int total = Math.Abs(ability.PushDistance);
             bool pulling = ability.PushDistance < 0;
+            int total = Math.Abs(ability.PushDistance);
+            total += pulling ? attacker.Stats.PassivePullBonus : attacker.Stats.PassivePushBonus;
+            total -= pulling ? target.Stats.PassivePullResist : target.Stats.PassivePushResist;
+            total = Math.Max(0, total);
             var (dx, dy) = CardinalDirectionFrom(attacker.Position, target.Position);
             if (pulling) { dx = -dx; dy = -dy; }
 
@@ -3073,6 +3076,9 @@ namespace DungeonTower.UI
                         break;
                     case StatusApplyOutcome.Resisted:
                         Debug.Log($"{target.DisplayName} resists {app.Id}.");
+                        break;
+                    case StatusApplyOutcome.Immune:
+                        Debug.Log($"{target.DisplayName} is immune to {app.Id}.");
                         break;
                         // ProcFailed: silent — an on-hit proc that didn't trigger isn't news.
                 }
@@ -4005,11 +4011,30 @@ namespace DungeonTower.UI
             var endTick = ending.Status.OnTurnEnd();
             ending.ReceiveHeal(ending.Stats.PassiveHPRegen);
             ending.RestoreMp(ending.Stats.PassiveMpRegen);
+            ApplyEndOfTurnAura(ending);
             foreach (var line in endTick.Log) Debug.Log(line);
             if (wasAlive && !ending.IsAlive)
             {
                 _unitViews[ending].Refresh();
                 HandleDeath(ending);
+            }
+        }
+
+        private void ApplyEndOfTurnAura(CombatUnit unit)
+        {
+            int damage = unit.Stats.PassiveAuraDamage;
+            int range = unit.Stats.PassiveAuraRange;
+            if (!unit.IsAlive || damage <= 0 || range <= 0) return;
+
+            foreach (var other in _unitViews.Keys.ToList())
+            {
+                if (!other.IsAlive || other.Faction == unit.Faction) continue;
+                if (!unit.Position.IsWithinRange(other.Position, range)) continue;
+
+                other.ApplyDamage(damage, out _);
+                Debug.Log($"{unit.DisplayName}'s aura hurts {other.DisplayName} for {damage}.");
+                _unitViews[other].Refresh();
+                if (!other.IsAlive) HandleDeath(other);
             }
         }
 

@@ -1,5 +1,6 @@
-using System;
 using DungeonTower.Core;
+using System;
+using System.Linq;
 
 namespace DungeonTower.Combat
 {
@@ -36,8 +37,7 @@ namespace DungeonTower.Combat
 
         public static AttackResult Resolve(CombatUnit attacker, CombatUnit defender, IAbility ability, Random rng)
         {
-            float attack = AbilityScaling.Total(attacker.Stats, ability);
-            float defense = ability.Kind == AttackKind.Physical
+            float attack = AbilityScaling.Total(attacker.Stats, ability) + WeaponTypeBonus(attacker, ability); float defense = ability.Kind == AttackKind.Physical
                 ? defender.Stats.PhysicalDefense
                 : defender.Stats.MagicDefense;
 
@@ -50,5 +50,15 @@ namespace DungeonTower.Combat
 
             return new AttackResult(isCrit, (int)Math.Round(rawDamage, MidpointRounding.AwayFromZero));
         }
+
+        private static float WeaponTypeBonus(CombatUnit attacker, IAbility ability)
+        {
+            float bonus = 0f;
+            foreach (var weapon in new[] { attacker.MainHand, attacker.OffHand })
+                if (weapon != null && weapon.Abilities.Contains(ability))
+                    bonus += attacker.Stats.PassiveDamageWith(weapon.Group);
+            return bonus;
+        }
     }
+
 }

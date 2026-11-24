@@ -72,6 +72,11 @@ namespace DungeonTower.Combat
         {
             var rule = StatusRules.Get(app.Id);
 
+            if (_owner.Stats.IsImmuneTo(app.Id))
+            {
+                return new StatusApplyResult(StatusApplyOutcome.Immune, null);
+            }
+
             float potency = rng != null && source != null ? source.Stats.Potency : 0f;
             float potencyScale = 1f + potency / 100f;
 
